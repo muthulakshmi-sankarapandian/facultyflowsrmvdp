@@ -506,6 +506,9 @@ function TopHeader({ c, clock, lastSync, summary, themeMode, setThemeMode, onMen
 function Dashboard({ c, records, summary, bufferMin, onOpenTeacher, pushToast }) {
   return (
     <div className="space-y-6">
+      <div className="md:hidden">
+        <TeacherSearch c={c} todayRecords={records} />
+      </div>
       <SummarySection c={c} summary={summary} />
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
         <div className="xl:col-span-2">
