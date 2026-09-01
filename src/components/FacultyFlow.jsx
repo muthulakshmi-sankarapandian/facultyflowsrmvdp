@@ -911,10 +911,23 @@ function TeacherDrawer({ c, teacherId, onClose, todayRecords }) {
               </div>
 
               {stats && (
-                <div className="grid grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-4 gap-2.5">
                   <StatMini c={c} label="Attendance" value={`${stats.pct}%`} tone={c.brand} />
                   <StatMini c={c} label="Late (30d)" value={stats.late} tone={STATUS_META.Late.fg} />
+                  <StatMini c={c} label={`Late in ${DEMO_DATE.toLocaleDateString("en-IN", { month: "short" })}`} value={mStats.late} tone={STATUS_META.Late.fg} />
                   <StatMini c={c} label="Absent (30d)" value={stats.absent} tone={STATUS_META.Absent.fg} />
+                </div>
+              )}
+
+              {mStats && (
+                <div className="rounded-xl p-4" style={{ background: STATUS_META.Late.bg }}>
+                  <div className="text-[11px] font-bold uppercase tracking-wide" style={{ color: STATUS_META.Late.fg }}>
+                    Late arrivals · {mStats.month}
+                  </div>
+                  <div className="text-[13px] mt-1" style={{ color: STATUS_META.Late.fg }}>
+                    Late <b>{mStats.late}</b> {mStats.late === 1 ? "time" : "times"} out of {mStats.workingDays} working days
+                    {mStats.late > 0 && <> · avg delay <b>+{mStats.avgLate} min</b></>}
+                  </div>
                 </div>
               )}
 
