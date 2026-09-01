@@ -1421,3 +1421,145 @@ function ToastStack({ c, toasts }) {
     </div>
   );
 }
+/* ------------------------------ TEACHER SEARCH -------------------------------- */
+
+function TeacherSearch({ c, todayRecords }) {
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState(null);
+
+  const matches = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    if (!s) return [];
+    return TEACHERS.filter(
+      (t) => t.name.toLowerCase().includes(s) || t.dept.toLowerCase().includes(s) || t.subject.toLowerCase().includes(s)
+    ).slice(0, 6);
+  }, [q]);
+
+  const today = selected ? todayRecords.find((r) => r.id === selected.id) : null;
+  const ms = useMemo(() => (selected ? monthStats(selected.id, today) : null), [selected, today]);
+
+  return (
+    <div className="relative w-full">
+      <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: c.inkFaint }} />
+      <input
+        value={q}
+        onChange={(e) => { setQ(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        placeholder="Search a teacher's name…"
+        className="w-full pl-9 pr-3 h-10 rounded-xl text-[13px] outline-none"
+        style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.ink }}
+      />
+
+      <AnimatePresence>
+        {open && matches.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+            className="absolute left-0 right-0 mt-1.5 rounded-xl p-1.5 z-50"
+            style={{ background: c.surface, border: `1px solid ${c.border}`, boxShadow: "0 12px 30px rgba(0,0,0,.14)" }}
+          >
+            {matches.map((t) => {
+              const m = monthStats(t.id, todayRecords.find((r) => r.id === t.id));
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => { setSelected(t); setOpen(false); setQ(t.name); }}
+                  className="w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-left"
+                  style={{ color: c.ink }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = c.surfaceAlt)}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[12.5px] font-semibold truncate">{t.name}</div>
+                    <div className="text-[11px] truncate" style={{ color: c.inkFaint }}>{t.dept} · {t.subject}</div>
+                  </div>
+                  <span className="text-[11px] font-semibold shrink-0 px-2 py-0.5 rounded-full"
+                    style={{ color: STATUS_META.Late.fg, background: STATUS_META.Late.bg }}>
+                    {m.late} late
+                  </span>
+                </button>
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {selected && ms && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/45 z-[70]" onClick={() => setSelected(null)} />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97 }}
+              transition={{ duration: 0.18 }}
+              className="fixed z-[80] left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-lg rounded-2xl overflow-hidden"
+              style={{ background: c.surface, border: `1px solid ${c.border}`, boxShadow: "0 24px 60px rgba(0,0,0,.28)" }}
+            >
+              <div className="p-5 flex items-start gap-3" style={{ borderBottom: `1px solid ${c.border}` }}>
+                <div className="h-11 w-11 rounded-xl flex items-center justify-center font-bold text-[15px] shrink-0"
+                  style={{ background: c.brandSoft, color: c.brand }}>
+                  {selected.name.split(" ").slice(-2).map((w) => w[0]).join("")}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[15px] font-bold truncate" style={{ fontFamily: "'Inter Tight', Inter, sans-serif" }}>{selected.name}</div>
+                  <div className="text-[12px] flex items-center gap-1" style={{ color: c.inkFaint }}>
+                    <Building2 size={11} /> {selected.dept} · {selected.subject}
+                  </div>
+                </div>
+                {today && <Badge status={today.status} />}
+                <button onClick={() => setSelected(null)} className="h-8 w-8 inline-flex items-center justify-center rounded-lg shrink-0" style={{ color: c.inkFaint }}>
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="p-5 space-y-4">
+                <div className="rounded-xl p-4 flex items-center gap-4" style={{ background: STATUS_META.Late.bg }}>
+                  <div className="text-[34px] font-extrabold ff-mono leading-none" style={{ color: STATUS_META.Late.fg, fontFamily: "'Inter Tight', Inter, sans-serif" }}>
+                    {ms.late}
+                  </div>
+                  <div>
+                    <div className="text-[13px] font-bold" style={{ color: STATUS_META.Late.fg }}>
+                      late {ms.late === 1 ? "arrival" : "arrivals"} in {ms.month}
+                    </div>
+                    <div className="text-[11.5px]" style={{ color: STATUS_META.Late.fg }}>
+                      {ms.workingDays} working days recorded{ms.late > 0 ? ` · avg delay +${ms.avgLate} min · ${ms.totalLateMin} min total` : ""}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-4 gap-2.5">
+                  <StatMini c={c} label="Attendance" value={`${ms.pct}%`} tone={c.brand} />
+                  <StatMini c={c} label="Present" value={ms.present} tone={STATUS_META.Present.fg} />
+                  <StatMini c={c} label="Absent" value={ms.absent} tone={STATUS_META.Absent.fg} />
+                  <StatMini c={c} label="Leave" value={ms.leave} tone={STATUS_META.Leave.fg} />
+                </div>
+
+                <div>
+                  <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: c.inkFaint }}>
+                    Late days this month
+                  </div>
+                  {ms.lateRows.length === 0 ? (
+                    <div className="rounded-xl p-4 text-center text-[12.5px]" style={{ background: c.surfaceAlt, color: c.inkFaint }}>
+                      No late arrivals this month — perfect punctuality.
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5 max-h-52 overflow-y-auto">
+                      {ms.lateRows.map((r, i) => (
+                        <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: c.surfaceAlt }}>
+                          <span className="text-[12px]" style={{ color: c.inkMuted }}>
+                            {r.date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", weekday: "short" })}
+                          </span>
+                          <span className="text-[12px] font-semibold ff-mono" style={{ color: STATUS_META.Late.fg }}>+{r.delay} min</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
