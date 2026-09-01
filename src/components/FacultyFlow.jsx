@@ -446,7 +446,7 @@ function Sidebar({ c, page, setPage, open, setOpen, mobileOpen, setMobileOpen })
 
 /* -------------------------------- TOP HEADER --------------------------------- */
 
-function TopHeader({ c, clock, lastSync, summary, themeMode, setThemeMode, onMenu, onManualNote }) {
+function TopHeader({ c, clock, lastSync, summary, themeMode, setThemeMode, onMenu, onManualNote, todayRecords }) {
   const timeStr = clock.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
   const syncStr = lastSync.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
 
