@@ -188,6 +188,35 @@ function buildHistory(teacherId, days = 30) {
   return out.reverse();
 }
 
+/* Month-to-date stats for a single teacher (used by search + drawer). */
+const MONTH_LABEL = DEMO_DATE.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+
+function monthStats(teacherId, todayRecord) {
+  const rows = buildHistory(teacherId, 30).filter(
+    (h) => h.date.getMonth() === DEMO_DATE.getMonth() && h.date.getFullYear() === DEMO_DATE.getFullYear()
+  );
+  if (todayRecord) rows.push({ date: DEMO_DATE, status: todayRecord.status, delay: todayRecord.delay });
+  const working = rows.filter((r) => r.status !== "Holiday");
+  const lateRows = rows.filter((r) => r.status === "Late");
+  const present = rows.filter((r) => r.status === "Present").length;
+  const absent = rows.filter((r) => r.status === "Absent").length;
+  const leave = rows.filter((r) => r.status === "Leave").length;
+  const totalLateMin = lateRows.reduce((a, b) => a + (b.delay || 0), 0);
+  return {
+    month: MONTH_LABEL,
+    rows,
+    lateRows,
+    workingDays: working.length,
+    late: lateRows.length,
+    present,
+    absent,
+    leave,
+    pct: working.length ? Math.round(((present + lateRows.length) / working.length) * 100) : 0,
+    avgLate: lateRows.length ? Math.round(totalLateMin / lateRows.length) : 0,
+    totalLateMin,
+  };
+}
+
 /* ------------------------------- SMALL PRIMITIVES --------------------------- */
 
 function Badge({ status }) {
