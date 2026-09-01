@@ -859,6 +859,7 @@ function TeacherDrawer({ c, teacherId, onClose, todayRecords }) {
   const teacher = TEACHERS.find((t) => t.id === teacherId);
   const today = todayRecords.find((r) => r.id === teacherId);
   const history = useMemo(() => (teacherId ? buildHistory(teacherId, 30) : []), [teacherId]);
+  const mStats = useMemo(() => (teacherId ? monthStats(teacherId, today) : null), [teacherId, today]);
 
   const stats = useMemo(() => {
     if (!history.length) return null;
