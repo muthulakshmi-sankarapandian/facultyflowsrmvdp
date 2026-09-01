@@ -462,6 +462,10 @@ function TopHeader({ c, clock, lastSync, summary, themeMode, setThemeMode, onMen
           <div className="text-[12px] leading-tight" style={{ color: c.inkFaint }}>{dateLabel(DEMO_DATE)}</div>
         </div>
 
+        <div className="hidden md:block ml-6 flex-1 max-w-sm">
+          <TeacherSearch c={c} todayRecords={todayRecords} />
+        </div>
+
         <div className="ml-auto flex items-center gap-2 sm:gap-4">
           <div className="hidden md:flex items-center gap-4 pr-4 mr-1" style={{ borderRight: `1px solid ${c.border}` }}>
             <div className="text-right">
