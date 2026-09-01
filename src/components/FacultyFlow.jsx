@@ -322,7 +322,7 @@ export default function FacultyFlowApp() {
 
         <div className="flex-1 min-w-0">
           <TopHeader
-            c={c} clock={clock} lastSync={lastSync} summary={summary}
+            c={c} clock={clock} lastSync={lastSync} summary={summary} todayRecords={todayRecords}
             themeMode={themeMode} setThemeMode={setThemeMode}
             onMenu={() => setMobileNavOpen(true)}
             onManualNote={() => pushToast("Live sync active", "Faculty Flow watches the punch sheet automatically — no manual refresh needed.", "info")}
