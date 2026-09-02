@@ -1504,7 +1504,7 @@ function ToastStack({ c, toasts }) {
 }
 /* ------------------------------ TEACHER SEARCH -------------------------------- */
 
-function TeacherSearch({ c, todayRecords }) {
+function TeacherSearch({ c, todayRecords, teachers = [] }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState(null);
@@ -1512,13 +1512,12 @@ function TeacherSearch({ c, todayRecords }) {
   const matches = useMemo(() => {
     const s = q.trim().toLowerCase();
     if (!s) return [];
-    return TEACHERS.filter(
-      (t) => t.name.toLowerCase().includes(s) || t.dept.toLowerCase().includes(s) || t.subject.toLowerCase().includes(s)
-    ).slice(0, 6);
-  }, [q]);
+    return teachers.filter((t) => t.name.toLowerCase().includes(s) || (t.dept || "").toLowerCase().includes(s)).slice(0, 6);
+  }, [q, teachers]);
 
   const today = selected ? todayRecords.find((r) => r.id === selected.id) : null;
   const ms = useMemo(() => (selected ? monthStats(selected.id, today) : null), [selected, today]);
+
 
   return (
     <div className="relative w-full">
