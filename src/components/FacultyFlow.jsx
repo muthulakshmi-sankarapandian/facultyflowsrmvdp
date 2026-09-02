@@ -139,60 +139,63 @@ function seeded(seed) {
   return () => (s = (s * 16807) % 2147483647) / 2147483647;
 }
 
-// Handcrafted "today" punches for a clear, realistic mix of statuses.
-const TODAY_PUNCH_OVERRIDE = {
-  t1: "08:51", t2: "08:38", t3: null, t4: "10:07", t5: "08:41",
-  t6: null, t7: "08:24", t9: null, t10: "09:04", t11: "08:20",
-  t12: "10:41", t13: "09:12", t14: "08:52",
+const BASE_PUNCHES = {
+  t1: "07:58", t2: "08:44", t4: "09:07", t5: "07:51",
+  t7: "08:04", t10: "08:52", t11: "07:50", t12: "09:41", t14: "08:12",
 };
-
+const PENDING_PUNCHES = [
+  { id: "t13", time: "08:47" },
+  { id: "t6", time: "08:58" },
+  { id: "t3", time: "09:12" },
+];
+function punchSheet(syncCount) {
+  const sheet = { ...BASE_PUNCHES };
+  PENDING_PUNCHES.slice(0, syncCount).forEach((p) => { sheet[p.id] = p.time; });
+  return sheet;
+}
 function computeStatus({ deadline, punch, nowMin, leave }) {
   if (deadline == null) return "Holiday";
   if (leave) return "Leave";
   if (punch != null) return punch <= deadline ? "Present" : "Late";
+  if (nowMin >= END_OF_DAY_MIN) return "Absent";
   return nowMin >= deadline ? "Absent" : "Waiting";
 }
-
-function buildTodayRecords() {
+function buildTodayRecords(syncCount = 0, nowMin = DEMO_NOW_MIN) {
+  const sheet = punchSheet(syncCount);
   return TEACHERS.map((t) => {
     const classTime = TIMETABLE[t.id][DEMO_WEEKDAY];
-    const deadline = classTime == null ? null : toMin(classTime) - REPORTING_BUFFER;
-    const leave = t.id === "t8"; // one teacher on approved leave today
-    const punchRaw = TODAY_PUNCH_OVERRIDE[t.id];
+    const deadline = deadlineFor(classTime);
+    const leave = t.id === "t8";
+    const punchRaw = sheet[t.id];
     const punch = leave || classTime == null ? null : (punchRaw ? toMin(punchRaw) : null);
-    const status = computeStatus({ deadline, punch, nowMin: DEMO_NOW_MIN, leave });
+    const status = computeStatus({ deadline, punch, nowMin, leave });
     const delay = status === "Late" ? punch - deadline : status === "Present" ? Math.max(deadline - punch, 0) * -1 : null;
-    return {
-      id: t.id, name: t.name, dept: t.dept, subject: t.subject,
-      firstClass: classTime, deadline, punch, status, delay,
-    };
+    return { id: t.id, name: t.name, dept: t.dept, subject: t.subject, firstClass: classTime, deadline, punch, status, delay };
   });
 }
-
 function buildHistory(teacherId, days = 30) {
   const rand = seeded(teacherId.charCodeAt(0) * 97 + teacherId.length * 13 + days);
   const out = [];
   let d = new Date(DEMO_DATE);
-  let count = 0;
   while (out.length < days) {
     d.setDate(d.getDate() - 1);
-    const dow = d.getDay(); // 0 sun .. 6 sat
-    if (dow === 0 || dow === 6) continue; // skip weekends
+    const dow = d.getDay();
+    if (dow === 0 || dow === 6) continue;
     const wd = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dow];
     const classTime = TIMETABLE[teacherId][wd];
-    if (classTime == null) { out.push({ date: new Date(d), status: "Holiday", delay: null }); continue; }
-    const deadline = toMin(classTime) - REPORTING_BUFFER;
+    if (classTime == null) { out.push({ date: new Date(d), status: "Holiday", delay: null, deadline: null, punch: null }); continue; }
+    const deadline = deadlineFor(classTime);
     const r = rand();
-    let status, delay;
-    if (r < 0.72) { status = "Present"; delay = -Math.round(rand() * 6); }
-    else if (r < 0.88) { status = "Late"; delay = Math.round(3 + rand() * 22); }
-    else if (r < 0.95) { status = "Absent"; delay = null; }
-    else { status = "Leave"; delay = null; }
-    out.push({ date: new Date(d), status, delay });
-    count++;
+    let status, delay, punch;
+    if (r < 0.72) { status = "Present"; delay = -Math.round(rand() * 6); punch = deadline + delay; }
+    else if (r < 0.88) { status = "Late"; delay = Math.round(3 + rand() * 22); punch = deadline + delay; }
+    else if (r < 0.95) { status = "Absent"; delay = null; punch = null; }
+    else { status = "Leave"; delay = null; punch = null; }
+    out.push({ date: new Date(d), status, delay, deadline, punch });
   }
   return out.reverse();
 }
+
 
 /* Month-to-date stats for a single teacher (used by search + drawer). */
 const MONTH_LABEL = DEMO_DATE.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
