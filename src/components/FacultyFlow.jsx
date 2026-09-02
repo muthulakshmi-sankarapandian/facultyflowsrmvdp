@@ -350,15 +350,16 @@ export default function FacultyFlowApp() {
             c={c} clock={clock} lastSync={lastSync} summary={summary} todayRecords={todayRecords}
             themeMode={themeMode} setThemeMode={setThemeMode}
             onMenu={() => setMobileNavOpen(true)}
-            onManualNote={() => pushToast("Live sync active", "Faculty Flow watches the punch sheet automatically — no manual refresh needed.", "info")}
+            onManualNote={() => syncNow(true)}
           />
 
           <main className="px-4 sm:px-6 lg:px-8 py-6 max-w-[1400px] mx-auto">
             <AnimatePresence mode="wait">
               {page === "dashboard" && (
                 <motion.div key="dash" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}>
-                  <Dashboard c={c} records={todayRecords} summary={summary} bufferMin={bufferMin}
-                    onOpenTeacher={setDrawerTeacher} pushToast={pushToast} />
+                  <Dashboard c={c} records={todayRecords} summary={summary} onOpenTeacher={setDrawerTeacher}
+                    pushToast={pushToast} syncNow={syncNow} lastSync={lastSync} watchConnected={watchConnected}
+                    setWatchConnected={setWatchConnected} sources={sources} setSources={setSources} />
                 </motion.div>
               )}
               {page === "history" && (
@@ -368,10 +369,10 @@ export default function FacultyFlowApp() {
               )}
               {page === "settings" && (
                 <motion.div key="set" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}>
-                  <SettingsPage c={c} themeMode={themeMode} setThemeMode={setThemeMode}
-                    bufferMin={bufferMin} setBufferMin={setBufferMin} pushToast={pushToast} />
+                  <SettingsPage c={c} themeMode={themeMode} setThemeMode={setThemeMode} pushToast={pushToast} />
                 </motion.div>
               )}
+
             </AnimatePresence>
           </main>
         </div>
