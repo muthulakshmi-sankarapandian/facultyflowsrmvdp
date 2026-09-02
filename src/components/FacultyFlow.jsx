@@ -133,6 +133,80 @@ function historyRows() {
   return rows;
 }
 
+function nameTokens(name) {
+  return String(name || "")
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w && !["dr", "mr", "mrs", "ms", "prof", "professor", "miss"].includes(w));
+}
+function normalizeName(name) { return nameTokens(name); }
+function nameScore(aTokens, bTokens) {
+  if (!aTokens.length || !bTokens.length) return 0;
+  const b = [...bTokens];
+  let core = 0, initial = 0;
+  aTokens.forEach((w) => {
+    let i = b.findIndex((x) => x === w);
+    if (i < 0 && w.length > 3) i = b.findIndex((x) => x.length > 3 && (x.startsWith(w) || w.startsWith(x)));
+    if (i >= 0) { b.splice(i, 1); if (w.length > 1) core++; else initial++; return; }
+    if (w.length === 1) {
+      const j = b.findIndex((x) => x[0] === w);
+      if (j >= 0) { b.splice(j, 1); initial++; }
+    }
+  });
+  const shorter = Math.min(aTokens.filter((w) => w.length > 1).length, bTokens.filter((w) => w.length > 1).length);
+  if (core < Math.min(2, shorter || 1)) return 0;
+  return core * 10 + initial;
+}
+function fuzzyFindTeacher(teachers, rawName) {
+  const nt = nameTokens(rawName);
+  if (!nt.length) return null;
+  let best = null, bestScore = 0;
+  teachers.forEach((t) => {
+    const s = nameScore(nt, t.tokens || nameTokens(t.name));
+    if (s > bestScore) { bestScore = s; best = t; }
+  });
+  return bestScore > 0 ? best : null;
+}
+
+function parseVerticalBlocks(grid, txt, dept) {
+  const teachers = [], timetable = {}, subjects = {};
+  let currentTeacher = null, currentId = null;
+  for (const rawRow of grid) {
+    const row = rawRow || [];
+    const first = txt(row[0]);
+    if (!first) continue;
+    const asNum = Number(first);
+    const isNum = first !== "" && !isNaN(asNum);
+    if (!isNum) {
+      if (/^(s\.?\s*no|sl\.?\s*no|day|days|hour|hours|department|staff)\.?:?$/i.test(first)) continue;
+      if (first.length < 4 || !/[a-z]{3}/i.test(first)) continue;
+      currentTeacher = first;
+      currentId = slugify(first);
+      continue;
+    }
+    if (!currentTeacher) continue;
+    if (asNum < 1 || asNum > 5) continue;
+    const day = DAY_KEYS[asNum];
+    let hour = null, subject = "";
+    for (let c = 1; c < row.length; c++) {
+      const v = txt(row[c]);
+      if (v) { hour = c; subject = v; break; }
+    }
+    if (hour == null) continue;
+    if (!timetable[currentId]) {
+      timetable[currentId] = {};
+      subjects[currentId] = {};
+      teachers.push({ id: currentId, name: currentTeacher, dept: dept || "Faculty", tokens: nameTokens(currentTeacher) });
+    }
+    if (timetable[currentId][day] == null) {
+      timetable[currentId][day] = hour;
+      subjects[currentId][day] = subject;
+    }
+  }
+  return { teachers, timetable, subjects };
+}
+
 async function parseTimetableFile(file) {
   const XLSX = await import("xlsx");
   const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
@@ -170,38 +244,46 @@ async function parseTimetableFile(file) {
         }
       }
       if (!Object.keys(days).length) continue;
-      teachers.push({ id, name, dept: dept || "Faculty" });
+      teachers.push({ id, name, dept: dept || "Faculty", tokens: nameTokens(name) });
       timetable[id] = days;
       subjects[id] = subs;
     }
   }
-  if (!teachers.length) throw new Error("no faculty blocks found");
+  if (!teachers.length) {
+    const v = parseVerticalBlocks(grid, txt, dept);
+    if (!v.teachers.length) throw new Error("no faculty blocks found");
+    return { ...v, dept };
+  }
   return { teachers, timetable, subjects, dept };
 }
 
-async function parsePunchFile(file, teachers) {
-  const XLSX = await import("xlsx");
-  const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
-  const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+function punchRowsToMap(rows, teachers) {
   const map = {};
   rows.forEach((row) => {
     const entries = Object.entries(row);
     const nameEntry = entries.find(([k]) => /name|teacher|staff|faculty|employee/i.test(k));
     const timeEntry = entries.find(([k]) => /time|punch|in\b/i.test(k));
     if (!nameEntry || !timeEntry) return;
-    const nm = normName(nameEntry[1]);
-    const match = String(timeEntry[1]).match(/(\d{1,2}):(\d{2})/);
-    if (!nm || !match) return;
-    const t = teachers.find((x) => {
-      const a = normName(x.name);
-      return a === nm || (a.length > 4 && nm.includes(a)) || (nm.length > 4 && a.includes(nm));
-    });
+    const raw = timeEntry[1];
+    const match = raw instanceof Date && !isNaN(raw)
+      ? [null, String(raw.getHours()), String(raw.getMinutes())]
+      : String(raw).match(/(\d{1,2}):(\d{2})/);
+    if (!match) return;
+    const t = fuzzyFindTeacher(teachers, nameEntry[1]);
     if (!t) return;
     const min = Number(match[1]) * 60 + Number(match[2]);
     if (map[t.id] == null || min < map[t.id]) map[t.id] = min;
   });
   return map;
 }
+
+async function parsePunchFile(file, teachers) {
+  const XLSX = await import("xlsx");
+  const wb = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
+  const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+  return punchRowsToMap(rows, teachers);
+}
+
 
 function findSheetDate(grid, filename) {
   for (const row of grid) {
