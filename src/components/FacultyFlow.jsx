@@ -530,7 +530,7 @@ function TopHeader({ c, clock, lastSync, summary, themeMode, setThemeMode, onMen
 
         <div className="min-w-0">
           <div className="text-[15px] font-bold leading-tight" style={{ fontFamily: "'Inter Tight', Inter, sans-serif" }}>Today's Teacher Attendance</div>
-          <div className="text-[12px] leading-tight" style={{ color: c.inkFaint }}>{dateLabel(DEMO_DATE)}</div>
+          <div className="text-[12px] leading-tight" style={{ color: c.inkFaint }}>{dateLabel(clock)}</div>
         </div>
 
         <div className="hidden md:block ml-6 flex-1 max-w-sm">
@@ -1023,7 +1023,7 @@ function TeacherDrawer({ c, teacherId, onClose, todayRecords, teachers = [] }) {
                   {today && <Badge status={today.status} />}
                 </div>
                 <div className="grid grid-cols-2 gap-3 text-[12.5px]">
-                  <div><div style={{ color: c.inkFaint }} className="text-[11px]">Subject</div><div className="font-semibold">{teacher.subject}</div></div>
+                  <div><div style={{ color: c.inkFaint }} className="text-[11px]">Subject</div><div className="font-semibold">{today?.subject || "—"}</div></div>
                   <div><div style={{ color: c.inkFaint }} className="text-[11px]">Reporting time</div><div className="font-semibold ff-mono">{today ? minToLabel(today.deadline) : "—"}</div></div>
                   <div><div style={{ color: c.inkFaint }} className="text-[11px]">Punch time</div><div className="font-semibold ff-mono">{today ? minToLabel(today.punch) : "—"}</div></div>
                   <div><div style={{ color: c.inkFaint }} className="text-[11px]">Delay</div><div className="font-semibold ff-mono">{today?.status === "Late" ? `+${today.delay} min` : "—"}</div></div>
@@ -1034,7 +1034,7 @@ function TeacherDrawer({ c, teacherId, onClose, todayRecords, teachers = [] }) {
                 <div className="grid grid-cols-4 gap-2.5">
                   <StatMini c={c} label="Attendance" value={`${stats.pct}%`} tone={c.brand} />
                   <StatMini c={c} label="Late (30d)" value={stats.late} tone={STATUS_META.Late.fg} />
-                  <StatMini c={c} label={`Late in ${DEMO_DATE.toLocaleDateString("en-IN", { month: "short" })}`} value={mStats.late} tone={STATUS_META.Late.fg} />
+                  <StatMini c={c} label="Late this month" value={mStats.late} tone={STATUS_META.Late.fg} />
                   <StatMini c={c} label="Absent (30d)" value={stats.absent} tone={STATUS_META.Absent.fg} />
                 </div>
               )}
