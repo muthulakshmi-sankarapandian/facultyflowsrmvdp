@@ -312,16 +312,31 @@ function findSheetDate(grid, filename) {
   return null;
 }
 
+function dateFromToken(s) {
+  const m = String(s || "").match(/(\d{1,2})[\s._\-/](\d{1,2})[\s._\-/](\d{2,4})/);
+  if (!m) return null;
+  let y = Number(m[3]); if (y < 100) y += 2000;
+  const d = new Date(y, Number(m[2]) - 1, Number(m[1]));
+  return isNaN(d) || d.getFullYear() < 2000 ? null : d;
+}
+
 async function parsePastPunchFile(file, teachers) {
   const XLSX = await import("xlsx");
-  const buf = await file.arrayBuffer();
-  const wb = XLSX.read(buf, { type: "array", cellDates: true });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const grid = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
-  const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
-  return { map: punchRowsToMap(rows, teachers), date: findSheetDate(grid, file.name) };
-
+  const wb = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
+  const out = [];
+  for (const name of wb.SheetNames) {
+    const ws = wb.Sheets[name];
+    if (!ws) continue;
+    const grid = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+    const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
+    const map = punchRowsToMap(rows, teachers);
+    if (!Object.keys(map).length) continue;
+    const date = dateFromToken(name) || findSheetDate(grid, wb.SheetNames.length > 1 ? "" : file.name) || dateFromToken(file.name);
+    out.push({ sheet: name, map, date });
+  }
+  return out;
 }
+
 
 function mergeHistoryDay(key, records) {
   if (!records.length) return 0;
@@ -1273,10 +1288,13 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
     const recs = buildRecords(tt, map, d, 24 * 60);
     if (!recs.length) { pushToast("No matching records", "None of the punches matched the active timetable for that weekday.", "error"); return false; }
     mergeHistoryDay(dateStr, recs);
+    setStartDate((p) => (dateStr < p ? dateStr : p));
+    setEndDate((p) => (!p || dateStr > p ? dateStr : p));
     onRefresh?.();
     pushToast("Past sheet saved", `${recs.length} records for ${d.toLocaleDateString("en-IN")} added to History from ${fileName}.`, "success");
     return true;
   }, [tt, pushToast, onRefresh]);
+
 
   const handlePastUpload = useCallback(async (e) => {
     const f = e.target.files?.[0];
@@ -1284,15 +1302,38 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
     if (!f) return;
     if (!tt) { pushToast("Upload a timetable first", "Past punches are verified against the active timetable.", "error"); return; }
     try {
-      const { map, date } = await parsePastPunchFile(f, tt.teachers);
-      if (!Object.keys(map).length) { pushToast("No punches matched", "No teacher names from the file matched the active timetable.", "error"); return; }
-      if (date) { savePastSheet(map, dayKey(date), f.name); return; }
-      setPendingPast({ map, name: f.name });
-      setPendingDate("");
+      const sheets = await parsePastPunchFile(f, tt.teachers);
+      if (!sheets.length) { pushToast("No punches matched", "No teacher names from the file matched the active timetable.", "error"); return; }
+      const dated = sheets.filter((s) => s.date);
+      const undated = sheets.filter((s) => !s.date);
+      let saved = 0, days = 0;
+      dated.forEach((s) => {
+        const d = s.date;
+        const recs = buildRecords(tt, s.map, d, 24 * 60);
+        if (!recs.length) return;
+        mergeHistoryDay(dayKey(d), recs);
+        saved += recs.length; days++;
+      });
+      if (saved) {
+        const keys = dated.map((s) => toDateInput(s.date)).sort();
+        setStartDate((p) => (keys[0] < p ? keys[0] : p));
+        setEndDate((p) => (!p || keys[keys.length - 1] > p ? keys[keys.length - 1] : p));
+        onRefresh?.();
+        pushToast("Past sheet saved", `${saved} records across ${days} day${days > 1 ? "s" : ""} added to History from ${f.name}.`, "success");
+      }
+
+      if (undated.length) {
+        const map = {};
+        undated.forEach((s) => Object.entries(s.map).forEach(([k, v]) => { if (map[k] == null || v < map[k]) map[k] = v; }));
+        setPendingPast({ map, name: f.name });
+        setPendingDate("");
+      } else if (!saved) {
+        pushToast("No matching records", "None of the punches matched the active timetable for those weekdays.", "error");
+      }
     } catch {
       pushToast("Could not read punch sheet", "Expected columns for teacher name and punch time.", "error");
     }
-  }, [tt, pushToast, savePastSheet]);
+  }, [tt, pushToast, onRefresh]);
 
   const confirmPendingDate = useCallback(() => {
     if (!pendingPast || !pendingDate) return;
@@ -1307,6 +1348,7 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
   }, [pushToast, onRefresh]);
 
   const allRows = useMemo(() => historyRows(), [refreshKey]);
+
 
   const rangeRows = useMemo(() => {
     const s = fromDateInput(startDate);
@@ -1433,8 +1475,9 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
           </button>
           <input ref={pastInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handlePastUpload} />
           <button onClick={() => pastInputRef.current?.click()}
-            className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.inkMuted }}>
-            <CalendarPlus size={13} /> Upload past sheet
+            className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: c.brandLight, border: `1px solid ${c.brand}55`, color: c.brand }}>
+            <CalendarPlus size={13} /> Upload Past Punch Sheet
+
           </button>
           <button onClick={() => setConfirmFlush(true)}
             className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: STATUS_META.Absent.bg, border: `1px solid ${STATUS_META.Absent.fg}44`, color: STATUS_META.Absent.fg }}>
