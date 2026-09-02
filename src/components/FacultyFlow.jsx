@@ -403,7 +403,8 @@ export default function FacultyFlowApp() {
                 <motion.div key="dash" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}>
                   <Dashboard c={c} records={todayRecords} summary={summary} onOpenTeacher={setDrawerTeacher}
                     pushToast={pushToast} syncNow={syncNow} lastSync={lastSync} watchConnected={watchConnected}
-                    setWatchConnected={setWatchConnected} sources={sources} setSources={setSources} />
+                    setWatchConnected={setWatchConnected} sources={sources} setSources={setSources}
+                    clearPunchSheet={clearPunchSheet} applyPunchUpload={applyPunchUpload} />
                 </motion.div>
               )}
               {page === "history" && (
