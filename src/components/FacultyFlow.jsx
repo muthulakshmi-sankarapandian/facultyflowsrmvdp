@@ -574,18 +574,19 @@ function TopHeader({ c, clock, lastSync, summary, themeMode, setThemeMode, onMen
 
 /* --------------------------------- DASHBOARD ---------------------------------- */
 
-function Dashboard({ c, records, summary, onOpenTeacher, pushToast, syncNow, lastSync, watchConnected, setWatchConnected, sources, setSources }) {
+function Dashboard({ c, records, summary, onOpenTeacher, pushToast, syncNow, lastSync, watchConnected, setWatchConnected, sources, setSources, clearPunchSheet, applyPunchUpload }) {
   return (
     <div className="space-y-6">
       <div className="md:hidden">
         <TeacherSearch c={c} todayRecords={records} />
       </div>
-      <AttendanceTable c={c} records={records} onOpenTeacher={onOpenTeacher} pushToast={pushToast} />
+      <AttendanceTable c={c} records={records} onOpenTeacher={onOpenTeacher} pushToast={pushToast} clearPunchSheet={clearPunchSheet} />
       <SummarySection c={c} summary={summary} />
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
         <AttentionPanel c={c} records={records} onOpenTeacher={onOpenTeacher} />
         <UploadCard c={c} pushToast={pushToast} syncNow={syncNow} lastSync={lastSync}
-          watchConnected={watchConnected} setWatchConnected={setWatchConnected} sources={sources} setSources={setSources} />
+          watchConnected={watchConnected} setWatchConnected={setWatchConnected} sources={sources} setSources={setSources}
+          applyPunchUpload={applyPunchUpload} />
       </div>
     </div>
   );
