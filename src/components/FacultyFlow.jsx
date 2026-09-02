@@ -347,7 +347,21 @@ export default function FacultyFlowApp() {
     return () => clearTimeout(t);
   }, [watchConnected, pushToast]);
 
-  const todayRecords = useMemo(() => buildTodayRecords(syncCount), [syncCount]);
+  const [cleared, setCleared] = useState(false);
+  const [punchOverride, setPunchOverride] = useState(null);
+  const todayRecords = useMemo(() => (cleared ? [] : buildTodayRecords(syncCount, DEMO_NOW_MIN, punchOverride)), [syncCount, cleared, punchOverride]);
+  useEffect(() => { if (todayRecords.length) saveHistoryDay(DEMO_DATE.toDateString(), todayRecords); }, [todayRecords]);
+  const clearPunchSheet = useCallback(() => {
+    setCleared(true); setPunchOverride(null); setSyncCount(0);
+    setSources((s) => ({ ...s, punch: "— no punch sheet —" }));
+    pushToast("Punch sheet cleared", "Today's view is empty. Past days remain in History.", "info");
+  }, [pushToast]);
+  const applyPunchUpload = useCallback((map, fileName) => {
+    setPunchOverride(map); setCleared(false); setSyncCount(0); setLastSync(new Date());
+    setSources((s) => ({ ...s, punch: fileName }));
+    pushToast("Punch sheet applied", `${Object.keys(map).length} punches matched against today's timetable.`, "success");
+  }, [pushToast]);
+
 
 
   const summary = useMemo(() => {
