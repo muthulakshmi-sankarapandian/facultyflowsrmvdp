@@ -661,62 +661,77 @@ function AttentionPanel({ c, records, onOpenTeacher }) {
   );
 }
 
-function UploadCard({ c, pushToast }) {
+function UploadCard({ c, pushToast, syncNow, lastSync, watchConnected, setWatchConnected, sources, setSources }) {
   const [refreshing, setRefreshing] = useState(false);
+  const ttRef = React.useRef(null);
+  const psRef = React.useRef(null);
+  const replace = (kind) => (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setSources((s) => ({ ...s, [kind]: f.name }));
+    pushToast(kind === "timetable" ? "Timetable replaced" : "Punch sheet replaced", `${f.name} imported and applied.`, "success");
+    e.target.value = "";
+  };
+  const doRefresh = () => { setRefreshing(true); syncNow(true); setTimeout(() => setRefreshing(false), 800); };
   return (
     <div className="rounded-2xl p-5" style={{ background: c.surface, border: `1px solid ${c.border}` }}>
       <h3 className="text-[13px] font-bold mb-3" style={{ fontFamily: "'Inter Tight', Inter, sans-serif" }}>Data sources</h3>
-
       <div className="space-y-2.5">
         <div className="flex items-center gap-3 rounded-xl p-3" style={{ background: c.surfaceAlt }}>
           <div className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: c.brandSoft }}>
             <FileSpreadsheet size={15} style={{ color: c.brand }} />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-[12.5px] font-semibold truncate">Weekly Timetable</div>
-            <div className="text-[11px]" style={{ color: c.inkFaint }}>Loaded · 14 teachers</div>
+            <div className="text-[12.5px] font-semibold truncate">Timetable</div>
+            <div className="text-[11px] truncate" style={{ color: c.inkFaint }}>{sources.timetable} · 14 teachers</div>
           </div>
-          <button onClick={() => pushToast("Timetable replaced", "The new weekly timetable has been imported and applied.", "success")}
-            className="text-[11.5px] font-semibold px-2.5 py-1.5 rounded-lg shrink-0" style={{ color: c.brand, background: c.brandSoft }}>
-            Replace
+          <input ref={ttRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={replace("timetable")} />
+          <button onClick={() => ttRef.current?.click()}
+            className="text-[11.5px] font-semibold px-2.5 py-1.5 rounded-lg shrink-0 inline-flex items-center gap-1" style={{ color: c.brand, background: c.brandSoft }}>
+            <Upload size={12} /> Replace
           </button>
         </div>
-
         <div className="flex items-center gap-3 rounded-xl p-3" style={{ background: c.surfaceAlt }}>
           <div className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: c.brandSoft }}>
             <PlugZap size={15} style={{ color: c.brand }} />
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-[12.5px] font-semibold truncate">Today's Punch Sheet</div>
-            <div className="text-[11px]" style={{ color: c.inkFaint }}>Updated 08:41 AM · 11 records</div>
+            <div className="text-[11px] truncate" style={{ color: c.inkFaint }}>{sources.punch} · synced {lastSync.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}</div>
           </div>
-          <button
-            onClick={() => { setRefreshing(true); pushToast("New punch record imported", "1 new record detected from the watched folder.", "success"); setTimeout(() => setRefreshing(false), 900); }}
+          <input ref={psRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={replace("punch")} />
+          <button onClick={() => psRef.current?.click()}
+            className="text-[11.5px] font-semibold px-2.5 py-1.5 rounded-lg shrink-0 inline-flex items-center gap-1" style={{ color: c.brand, background: c.brandSoft }}>
+            <Upload size={12} /> Replace
+          </button>
+          <button onClick={doRefresh} title="Refresh"
             className="h-7 w-7 inline-flex items-center justify-center rounded-lg shrink-0" style={{ color: c.brand, background: c.brandSoft }}>
             <RefreshCw size={13} className={refreshing ? "animate-spin" : ""} />
           </button>
         </div>
-
         <div className="flex items-center gap-3 rounded-xl p-3" style={{ background: c.surfaceAlt }}>
           <div className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: c.brandSoft }}>
             <FolderSync size={15} style={{ color: c.brand }} />
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-[12.5px] font-semibold truncate">Watch folder</div>
-            <div className="text-[11px]" style={{ color: c.brand }}>● Connected</div>
+            <div className="text-[11px]" style={{ color: watchConnected ? c.brand : STATUS_META.Absent.fg }}>
+              {watchConnected ? "● Connected · auto-syncing" : "● Disconnected · reconnecting…"}
+            </div>
           </div>
-          <button onClick={() => pushToast("Reconnected", "Watch folder connection refreshed.", "info")}
+          <button onClick={() => { setWatchConnected(false); pushToast("Connection dropped", "Watch folder will reconnect automatically.", "info"); }}
             className="text-[11.5px] font-semibold px-2.5 py-1.5 rounded-lg shrink-0" style={{ color: c.inkMuted, background: c.surface, border: `1px solid ${c.border}` }}>
-            Reconnect
+            Test drop
           </button>
         </div>
       </div>
       <p className="text-[10.5px] mt-3 leading-relaxed" style={{ color: c.inkFaint }}>
-        No manual refresh needed — new punches are detected and imported automatically.
+        New punches import automatically every few seconds; the watch folder reconnects on its own if the link drops.
       </p>
     </div>
   );
 }
+
 
 /* ------------------------------- ATTENDANCE TABLE ------------------------------ */
 
