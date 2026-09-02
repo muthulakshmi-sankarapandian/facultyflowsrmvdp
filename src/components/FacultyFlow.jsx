@@ -1551,7 +1551,7 @@ function TeacherSearch({ c, todayRecords, teachers = [] }) {
                 >
                   <div className="min-w-0 flex-1">
                     <div className="text-[12.5px] font-semibold truncate">{t.name}</div>
-                    <div className="text-[11px] truncate" style={{ color: c.inkFaint }}>{t.dept} · {t.subject}</div>
+                    <div className="text-[11px] truncate" style={{ color: c.inkFaint }}>{t.dept}</div>
                   </div>
                   <span className="text-[11px] font-semibold shrink-0 px-2 py-0.5 rounded-full"
                     style={{ color: STATUS_META.Late.fg, background: STATUS_META.Late.bg }}>
@@ -1583,7 +1583,7 @@ function TeacherSearch({ c, todayRecords, teachers = [] }) {
                 <div className="min-w-0 flex-1">
                   <div className="text-[15px] font-bold truncate" style={{ fontFamily: "'Inter Tight', Inter, sans-serif" }}>{selected.name}</div>
                   <div className="text-[12px] flex items-center gap-1" style={{ color: c.inkFaint }}>
-                    <Building2 size={11} /> {selected.dept} · {selected.subject}
+                    <Building2 size={11} /> {selected.dept}
                   </div>
                 </div>
                 {today && <Badge status={today.status} />}
