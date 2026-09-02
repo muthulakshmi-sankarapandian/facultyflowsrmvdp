@@ -308,12 +308,14 @@ export default function FacultyFlowApp() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [clock, setClock] = useState(new Date());
-  const [lastSync, setLastSync] = useState(new Date(Date.now() - 60000));
+  const [lastSync, setLastSync] = useState(new Date());
   const [toasts, setToasts] = useState([]);
   const [drawerTeacher, setDrawerTeacher] = useState(null);
-  const [syncCount, setSyncCount] = useState(0);
   const [watchConnected, setWatchConnected] = useState(true);
-  const [sources, setSources] = useState({ timetable: "timetable-aug-2026.xlsx", punch: "punch-31-08-2026.xlsx" });
+  const [tt, setTt] = useState(null);
+  const [punchMap, setPunchMap] = useState(null);
+  const [sources, setSources] = useState({ timetable: "— no timetable —", punch: "— no punch sheet —" });
+  const [historyKey, setHistoryKey] = useState(0);
 
   const pushToast = useCallback((title, desc, kind = "success") => {
     const id = Math.random().toString(36).slice(2);
@@ -326,14 +328,18 @@ export default function FacultyFlowApp() {
     return () => clearInterval(iv);
   }, []);
 
+  useEffect(() => {
+    const saved = loadState();
+    if (saved.tt) { setTt(saved.tt); setSources((s) => ({ ...s, timetable: saved.ttName || "timetable.xlsx" })); }
+    if (saved.punch && saved.punchDate === dayKey(new Date())) { setPunchMap(saved.punch); setSources((s) => ({ ...s, punch: saved.punchName || "punch-sheet.xlsx" })); }
+  }, []);
+
   const syncNow = useCallback((manual) => {
-    setSyncCount((n) => {
-      const next = Math.min(n + 1, PENDING_PUNCHES.length);
-      setLastSync(new Date());
-      if (next > n) pushToast("New punch record imported", `${PENDING_PUNCHES[next - 1].id.toUpperCase()} punched at ${PENDING_PUNCHES[next - 1].time}.`, "sync");
-      else if (manual) pushToast("Already up to date", "No new punch records found in the watched folder.", "info");
-      return next;
-    });
+    const saved = loadState();
+    setLastSync(new Date());
+    if (saved.punch && saved.punchDate === dayKey(new Date())) setPunchMap(saved.punch);
+    setHistoryKey((k) => k + 1);
+    if (manual) pushToast("Sync complete", "Attendance recalculated from the current data sources.", "sync");
   }, [pushToast]);
 
   useEffect(() => {
@@ -347,22 +353,43 @@ export default function FacultyFlowApp() {
     return () => clearTimeout(t);
   }, [watchConnected, pushToast]);
 
-  const [cleared, setCleared] = useState(false);
-  const [punchOverride, setPunchOverride] = useState(null);
-  const todayRecords = useMemo(() => (cleared ? [] : buildTodayRecords(syncCount, DEMO_NOW_MIN, punchOverride)), [syncCount, cleared, punchOverride]);
-  useEffect(() => { if (todayRecords.length) saveHistoryDay(DEMO_DATE.toDateString(), todayRecords); }, [todayRecords]);
+  const nowMin = clock.getHours() * 60 + clock.getMinutes();
+  const todayRecords = useMemo(() => buildRecords(tt, punchMap, clock, nowMin), [tt, punchMap, nowMin]);
+  const teachers = tt ? tt.teachers : [];
+
+  useEffect(() => {
+    if (!todayRecords.length || !punchMap) return;
+    saveHistoryDay(dayKey(new Date()), todayRecords);
+    setHistoryKey((k) => k + 1);
+  }, [todayRecords, punchMap]);
+
   const clearPunchSheet = useCallback(() => {
-    setCleared(true); setPunchOverride(null); setSyncCount(0);
+    setPunchMap(null);
+    persistState({ punch: null, punchName: null, punchDate: null });
+    deleteHistoryDay(dayKey(new Date()));
     setSources((s) => ({ ...s, punch: "— no punch sheet —" }));
+    setHistoryKey((k) => k + 1);
     pushToast("Punch sheet cleared", "Today's view is empty. Past days remain in History.", "info");
   }, [pushToast]);
-  const applyPunchUpload = useCallback((map, fileName) => {
-    setPunchOverride(map); setCleared(false); setSyncCount(0); setLastSync(new Date());
-    setSources((s) => ({ ...s, punch: fileName }));
-    pushToast("Punch sheet applied", `${Object.keys(map).length} punches matched against today's timetable.`, "success");
+
+  const applyTimetableUpload = useCallback(async (file) => {
+    const parsed = await parseTimetableFile(file);
+    setTt(parsed);
+    persistState({ tt: parsed, ttName: file.name });
+    setSources((s) => ({ ...s, timetable: file.name }));
+    setLastSync(new Date());
+    pushToast("Timetable replaced", `${parsed.teachers.length} faculty schedules imported and applied.`, "success");
   }, [pushToast]);
 
-
+  const applyPunchUpload = useCallback(async (file) => {
+    if (!tt) { pushToast("Upload a timetable first", "Punch data is verified against the active timetable.", "error"); return; }
+    const map = await parsePunchFile(file, tt.teachers);
+    setPunchMap(map);
+    persistState({ punch: map, punchName: file.name, punchDate: dayKey(new Date()) });
+    setSources((s) => ({ ...s, punch: file.name }));
+    setLastSync(new Date());
+    pushToast("Punch sheet applied", `${Object.keys(map).length} punches matched against today's timetable.`, "success");
+  }, [pushToast, tt]);
 
   const summary = useMemo(() => {
     const scheduled = todayRecords.filter((r) => r.status !== "Holiday").length;
@@ -371,6 +398,7 @@ export default function FacultyFlowApp() {
     const pct = scheduled ? Math.round(((present + late) / scheduled) * 100) : 0;
     return { scheduled, present, late, absent, waiting, leave, pct };
   }, [todayRecords]);
+
 
   const shell = { background: c.canvas, color: c.ink, minHeight: "100vh", fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif" };
 
