@@ -707,16 +707,25 @@ function AttentionPanel({ c, records, onOpenTeacher }) {
   );
 }
 
-function UploadCard({ c, pushToast, syncNow, lastSync, watchConnected, setWatchConnected, sources, setSources }) {
+function UploadCard({ c, pushToast, syncNow, lastSync, watchConnected, setWatchConnected, sources, setSources, applyPunchUpload }) {
   const [refreshing, setRefreshing] = useState(false);
   const ttRef = React.useRef(null);
   const psRef = React.useRef(null);
-  const replace = (kind) => (e) => {
+  const replace = (kind) => async (e) => {
     const f = e.target.files?.[0];
-    if (!f) return;
-    setSources((s) => ({ ...s, [kind]: f.name }));
-    pushToast(kind === "timetable" ? "Timetable replaced" : "Punch sheet replaced", `${f.name} imported and applied.`, "success");
     e.target.value = "";
+    if (!f) return;
+    if (kind === "punch") {
+      try {
+        const map = await parsePunchFile(f);
+        applyPunchUpload(map, f.name);
+      } catch {
+        pushToast("Could not read punch sheet", "Expected columns for teacher name and punch time.", "error");
+      }
+      return;
+    }
+    setSources((s) => ({ ...s, timetable: f.name }));
+    pushToast("Timetable replaced", `${f.name} imported and applied.`, "success");
   };
   const doRefresh = () => { setRefreshing(true); syncNow(true); setTimeout(() => setRefreshing(false), 800); };
   return (
