@@ -741,7 +741,7 @@ function UploadCard({ c, pushToast, syncNow, lastSync, watchConnected, setWatchC
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-[12.5px] font-semibold truncate">Timetable</div>
-            <div className="text-[11px] truncate" style={{ color: c.inkFaint }}>{sources.timetable} · 14 teachers</div>
+            <div className="text-[11px] truncate" style={{ color: c.inkFaint }}>{sources.timetable} · {teacherCount} teachers</div>
           </div>
           <input ref={ttRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={replace("timetable")} />
           <button onClick={() => ttRef.current?.click()}
