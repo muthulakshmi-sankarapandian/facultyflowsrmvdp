@@ -973,10 +973,10 @@ function Th({ c, label, onClick, active, dir, sticky }) {
 
 /* -------------------------------- TEACHER DRAWER ------------------------------- */
 
-function TeacherDrawer({ c, teacherId, onClose, todayRecords }) {
-  const teacher = TEACHERS.find((t) => t.id === teacherId);
+function TeacherDrawer({ c, teacherId, onClose, todayRecords, teachers = [] }) {
+  const teacher = teachers.find((t) => t.id === teacherId);
   const today = todayRecords.find((r) => r.id === teacherId);
-  const history = useMemo(() => (teacherId ? buildHistory(teacherId, 30) : []), [teacherId]);
+  const history = useMemo(() => (teacherId ? historyRows().filter((r) => r.id === teacherId).sort((a, b) => a.date - b.date).slice(-30) : []), [teacherId]);
   const mStats = useMemo(() => (teacherId ? monthStats(teacherId, today) : null), [teacherId, today]);
 
   const stats = useMemo(() => {
@@ -994,6 +994,7 @@ function TeacherDrawer({ c, teacherId, onClose, todayRecords }) {
     delay: h.status === "Late" ? h.delay : h.status === "Absent" ? null : 0,
     status: h.status,
   }));
+
 
   return (
     <AnimatePresence>
