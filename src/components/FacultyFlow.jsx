@@ -1312,9 +1312,13 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
         saved += recs.length; days++;
       });
       if (saved) {
+        const keys = dated.map((s) => toDateInput(s.date)).sort();
+        setStartDate((p) => (keys[0] < p ? keys[0] : p));
+        setEndDate((p) => (!p || keys[keys.length - 1] > p ? keys[keys.length - 1] : p));
         onRefresh?.();
         pushToast("Past sheet saved", `${saved} records across ${days} day${days > 1 ? "s" : ""} added to History from ${f.name}.`, "success");
       }
+
       if (undated.length) {
         const map = {};
         undated.forEach((s) => Object.entries(s.map).forEach(([k, v]) => { if (map[k] == null || v < map[k]) map[k] = v; }));
