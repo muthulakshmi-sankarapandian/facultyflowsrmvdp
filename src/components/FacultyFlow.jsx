@@ -65,56 +65,11 @@ const STATUS_META = {
   Holiday: { fg: "#5B6459", bg: "#EEF0EC", dot: "#8B9285" },
 };
 
-/* --------------------------------- SAMPLE DATA ------------------------------ */
+/* --------------------------------- DATA LAYER ------------------------------ */
 
-const DEPARTMENTS = ["Computer Science", "Electronics (ECE)", "Mechanical", "Civil", "MBA", "Mathematics", "Physics", "English"];
-
-const TEACHERS = [
-  { id: "t1", name: "Dr. Chitra Ramesh", dept: "Computer Science", subject: "Data Structures" },
-  { id: "t2", name: "Mr. Kumaresan Pillai", dept: "Electronics (ECE)", subject: "Digital Circuits" },
-  { id: "t3", name: "Mrs. Priya Narayanan", dept: "MBA", subject: "Marketing Management" },
-  { id: "t4", name: "Dr. Anand Krishnan", dept: "Mechanical", subject: "Thermodynamics" },
-  { id: "t5", name: "Ms. Divya Suresh", dept: "Civil", subject: "Structural Analysis" },
-  { id: "t6", name: "Mr. Vignesh Raja", dept: "Computer Science", subject: "Operating Systems" },
-  { id: "t7", name: "Mrs. Meenakshi Iyer", dept: "Mathematics", subject: "Discrete Mathematics" },
-  { id: "t8", name: "Dr. Bala Subramaniam", dept: "Physics", subject: "Applied Physics" },
-  { id: "t9", name: "Mrs. Lakshmi Prasad", dept: "English", subject: "Technical Communication" },
-  { id: "t10", name: "Mr. Arun Chezhian", dept: "Electronics (ECE)", subject: "Signals & Systems" },
-  { id: "t11", name: "Dr. Deepa Venkatesan", dept: "Computer Science", subject: "Database Systems" },
-  { id: "t12", name: "Mr. Sathish Kumar", dept: "Mechanical", subject: "Fluid Mechanics" },
-  { id: "t13", name: "Ms. Nandhini Raja", dept: "Civil", subject: "Surveying" },
-  { id: "t14", name: "Dr. Ravi Shankar", dept: "MBA", subject: "Business Analytics" },
-];
-
-const HOUR_1 = "08:00";
-const HOUR_2 = "08:50";
-const TIMETABLE = {
-  t1: { Mon: "08:00", Tue: "08:50", Wed: "09:40", Thu: "08:00", Fri: "10:30" },
-  t2: { Mon: "08:50", Tue: "09:40", Wed: "08:00", Thu: "09:40", Fri: "08:50" },
-  t3: { Mon: "09:40", Tue: null, Wed: "08:50", Thu: "08:50", Fri: "10:30" },
-  t4: { Mon: "10:30", Tue: "08:00", Wed: "08:50", Thu: null, Fri: "08:00" },
-  t5: { Mon: "08:00", Tue: "08:00", Wed: "10:30", Thu: "08:50", Fri: null },
-  t6: { Mon: "08:50", Tue: "08:50", Wed: "08:00", Thu: "09:40", Fri: "08:50" },
-  t7: { Mon: "08:00", Tue: "09:40", Wed: "08:00", Thu: "08:00", Fri: "09:40" },
-  t8: { Mon: null, Tue: "08:50", Wed: "08:50", Thu: "09:40", Fri: "08:00" },
-  t9: { Mon: "10:30", Tue: "10:30", Wed: null, Thu: "09:40", Fri: "10:30" },
-  t10: { Mon: "08:50", Tue: "08:00", Wed: "09:40", Thu: "08:50", Fri: "08:00" },
-  t11: { Mon: "08:00", Tue: "08:00", Wed: "08:50", Thu: "08:00", Fri: null },
-  t12: { Mon: "09:40", Tue: "08:50", Wed: "08:00", Thu: "08:50", Fri: "09:40" },
-  t13: { Mon: "08:50", Tue: "09:40", Wed: "08:00", Thu: null, Fri: "08:50" },
-  t14: { Mon: "08:00", Tue: "08:50", Wed: "09:40", Thu: "08:00", Fri: null },
-};
-const DEMO_DATE = new Date(2026, 7, 31);
-const DEMO_WEEKDAY = "Mon";
-const DEMO_NOW_MIN = 8 * 60 + 42;
-const END_OF_DAY_MIN = 17 * 60;
-function deadlineFor(classTime) {
-  if (classTime == null) return null;
-  if (classTime === HOUR_1) return 7 * 60 + 55;
-  if (classTime === HOUR_2) return 8 * 60 + 40;
-  return 9 * 60;
-}
-
+const DAY_KEYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const STATE_KEY = "ff_state";
+const HISTORY_KEY = "ff_history_store";
 
 function toMin(hhmm) {
   if (!hhmm) return null;
@@ -131,110 +86,145 @@ function minToLabel(min) {
 function dateLabel(d) {
   return d.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 }
+function pad2(n) { return String(n).padStart(2, "0"); }
+function dayKey(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+function slugify(s) { return String(s).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }
+function normName(s) { return String(s).toLowerCase().replace(/\b(dr|mr|mrs|ms|prof|professor)\b/g, "").replace(/[^a-z]/g, ""); }
+function deadlineForHour(hour) { return hour === 1 ? 7 * 60 + 55 : hour === 2 ? 8 * 60 + 40 : 9 * 60; }
+function hourLabel(hour) { return hour == null ? "—" : hour === 1 ? "1st hr · 8:00 AM" : hour === 2 ? "2nd hr · 8:50 AM" : `Hour ${hour}`; }
 
-// Deterministic pseudo-random generator so charts/history stay stable across renders.
-function seeded(seed) {
-  let s = seed % 2147483647;
-  if (s <= 0) s += 2147483646;
-  return () => (s = (s * 16807) % 2147483647) / 2147483647;
+function loadState() {
+  if (typeof window === "undefined") return {};
+  try { return JSON.parse(window.localStorage.getItem(STATE_KEY) || "{}"); } catch { return {}; }
 }
-
-const BASE_PUNCHES = {
-  t1: "07:58", t2: "08:44", t4: "09:07", t5: "07:51",
-  t7: "08:04", t10: "08:52", t11: "07:50", t12: "09:41", t14: "08:12",
-};
-const PENDING_PUNCHES = [
-  { id: "t13", time: "08:47" },
-  { id: "t6", time: "08:58" },
-  { id: "t3", time: "09:12" },
-];
-function punchSheet(syncCount) {
-  const sheet = { ...BASE_PUNCHES };
-  PENDING_PUNCHES.slice(0, syncCount).forEach((p) => { sheet[p.id] = p.time; });
-  return sheet;
+function persistState(patch) {
+  if (typeof window === "undefined") return;
+  try { window.localStorage.setItem(STATE_KEY, JSON.stringify({ ...loadState(), ...patch })); } catch { /* quota */ }
 }
-function computeStatus({ deadline, punch, nowMin, leave }) {
-  if (deadline == null) return "Holiday";
-  if (leave) return "Leave";
-  if (punch != null) return punch <= deadline ? "Present" : "Late";
-  if (nowMin >= END_OF_DAY_MIN) return "Absent";
-  return nowMin >= deadline ? "Absent" : "Waiting";
-}
-function buildTodayRecords(syncCount = 0, nowMin = DEMO_NOW_MIN, override = null) {
-  const sheet = override || punchSheet(syncCount);
-  return TEACHERS.filter((t) => TIMETABLE[t.id][DEMO_WEEKDAY] != null).map((t) => {
-    const classTime = TIMETABLE[t.id][DEMO_WEEKDAY];
-    const deadline = deadlineFor(classTime);
-    const leave = !override && t.id === "t8";
-    const punchRaw = sheet[t.id];
-    const punch = leave ? null : (punchRaw ? toMin(punchRaw) : null);
-    const status = computeStatus({ deadline, punch, nowMin: override ? END_OF_DAY_MIN : nowMin, leave });
-    const delay = status === "Late" ? punch - deadline : status === "Present" ? Math.max(deadline - punch, 0) * -1 : null;
-    return { id: t.id, name: t.name, dept: t.dept, subject: t.subject, firstClass: classTime, deadline, punch, status, delay };
-  });
-}
-async function parsePunchFile(file) {
-  const XLSX = await import("xlsx");
-  const buf = await file.arrayBuffer();
-  const wb = XLSX.read(buf, { type: "array" });
-  const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
-  const map = {};
-  rows.forEach((r) => {
-    const vals = Object.entries(r);
-    const nameEntry = vals.find(([k]) => /name|teacher|staff/i.test(k));
-    const timeEntry = vals.find(([k]) => /time|punch|in/i.test(k));
-    if (!nameEntry || !timeEntry) return;
-    const name = String(nameEntry[1]).trim().toLowerCase();
-    const time = String(timeEntry[1]).trim().slice(0, 5);
-    if (!name || !/^\d{1,2}:\d{2}$/.test(time)) return;
-    const t = TEACHERS.find((x) => x.name.toLowerCase() === name || x.name.toLowerCase().includes(name) || name.includes(x.name.toLowerCase()));
-    if (t && TIMETABLE[t.id][DEMO_WEEKDAY] != null) map[t.id] = time.padStart(5, "0");
-  });
-  return map;
-}
-const HISTORY_KEY = "ff_history_store";
 function loadHistoryStore() {
   if (typeof window === "undefined") return {};
   try { return JSON.parse(window.localStorage.getItem(HISTORY_KEY) || "{}"); } catch { return {}; }
 }
-function saveHistoryDay(dateKey, records) {
-  if (typeof window === "undefined" || !records.length) return;
-  const store = loadHistoryStore();
-  store[dateKey] = records.map((r) => ({ id: r.id, teacher: r.name, dept: r.dept, status: r.status, delay: r.delay, deadline: r.deadline, punch: r.punch }));
+function writeHistoryStore(store) {
+  if (typeof window === "undefined") return;
   try { window.localStorage.setItem(HISTORY_KEY, JSON.stringify(store)); } catch { /* quota */ }
 }
-function buildHistory(teacherId, days = 30) {
-  const rand = seeded(teacherId.charCodeAt(0) * 97 + teacherId.length * 13 + days);
-  const out = [];
-  let d = new Date(DEMO_DATE);
-  while (out.length < days) {
-    d.setDate(d.getDate() - 1);
-    const dow = d.getDay();
-    if (dow === 0 || dow === 6) continue;
-    const wd = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dow];
-    const classTime = TIMETABLE[teacherId][wd];
-    if (classTime == null) { out.push({ date: new Date(d), status: "Holiday", delay: null, deadline: null, punch: null }); continue; }
-    const deadline = deadlineFor(classTime);
-    const r = rand();
-    let status, delay, punch;
-    if (r < 0.72) { status = "Present"; delay = -Math.round(rand() * 6); punch = deadline + delay; }
-    else if (r < 0.88) { status = "Late"; delay = Math.round(3 + rand() * 22); punch = deadline + delay; }
-    else if (r < 0.95) { status = "Absent"; delay = null; punch = null; }
-    else { status = "Leave"; delay = null; punch = null; }
-    out.push({ date: new Date(d), status, delay, deadline, punch });
-  }
-  return out.reverse();
+function saveHistoryDay(key, records) {
+  if (!records.length) return;
+  const store = loadHistoryStore();
+  store[key] = records.map((r) => ({ id: r.id, teacher: r.name, dept: r.dept, status: r.status, delay: r.delay, deadline: r.deadline, punch: r.punch }));
+  writeHistoryStore(store);
+}
+function deleteHistoryDay(key) {
+  const store = loadHistoryStore();
+  if (store[key] == null) return;
+  delete store[key];
+  writeHistoryStore(store);
+}
+function historyRows() {
+  const store = loadHistoryStore();
+  const rows = [];
+  Object.entries(store).forEach(([key, recs]) => {
+    const [y, m, d] = key.split("-").map(Number);
+    if (!y || !m || !d) return;
+    const date = new Date(y, m - 1, d);
+    (recs || []).forEach((r) => rows.push({ ...r, date }));
+  });
+  return rows;
 }
 
+async function parseTimetableFile(file) {
+  const XLSX = await import("xlsx");
+  const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+  const txt = (v) => (v == null ? "" : String(v).replace(/\s+/g, " ").trim());
+  let dept = "";
+  for (const n of wb.SheetNames) {
+    const g = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: null, raw: false });
+    for (const row of g) {
+      const i = (row || []).findIndex((v) => /^department\s*:?$/i.test(txt(v)));
+      if (i >= 0) {
+        const rest = row.slice(i + 1).find((v) => txt(v));
+        if (rest) { dept = txt(rest); break; }
+      }
+    }
+    if (dept) break;
+  }
+  const grid = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: null, raw: false });
+  const teachers = [], timetable = {}, subjects = {};
+  for (let r = 1; r < grid.length; r++) {
+    const row = grid[r] || [];
+    for (let cc = 0; cc < row.length; cc++) {
+      let header = true;
+      for (let h = 1; h <= 7; h++) if (txt(row[cc + h]) !== String(h)) { header = false; break; }
+      if (!header) continue;
+      const name = txt((grid[r - 1] || [])[cc]);
+      if (name.length < 4 || !/[a-z]{3}/i.test(name)) continue;
+      const id = slugify(name);
+      if (timetable[id]) continue;
+      const days = {}, subs = {};
+      for (let i = 0; i < 5; i++) {
+        const dr = grid[r + 1 + i] || [];
+        for (let h = 1; h <= 7; h++) {
+          const v = txt(dr[cc + h]);
+          if (v) { days[DAY_KEYS[i + 1]] = h; subs[DAY_KEYS[i + 1]] = v; break; }
+        }
+      }
+      if (!Object.keys(days).length) continue;
+      teachers.push({ id, name, dept: dept || "Faculty" });
+      timetable[id] = days;
+      subjects[id] = subs;
+    }
+  }
+  if (!teachers.length) throw new Error("no faculty blocks found");
+  return { teachers, timetable, subjects, dept };
+}
 
-/* Month-to-date stats for a single teacher (used by search + drawer). */
-const MONTH_LABEL = DEMO_DATE.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+async function parsePunchFile(file, teachers) {
+  const XLSX = await import("xlsx");
+  const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+  const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+  const map = {};
+  rows.forEach((row) => {
+    const entries = Object.entries(row);
+    const nameEntry = entries.find(([k]) => /name|teacher|staff|faculty|employee/i.test(k));
+    const timeEntry = entries.find(([k]) => /time|punch|in\b/i.test(k));
+    if (!nameEntry || !timeEntry) return;
+    const nm = normName(nameEntry[1]);
+    const match = String(timeEntry[1]).match(/(\d{1,2}):(\d{2})/);
+    if (!nm || !match) return;
+    const t = teachers.find((x) => {
+      const a = normName(x.name);
+      return a === nm || (a.length > 4 && nm.includes(a)) || (nm.length > 4 && a.includes(nm));
+    });
+    if (!t) return;
+    const min = Number(match[1]) * 60 + Number(match[2]);
+    if (map[t.id] == null || min < map[t.id]) map[t.id] = min;
+  });
+  return map;
+}
+
+function buildRecords(tt, punchMap, date, nowMin) {
+  if (!tt || !punchMap) return [];
+  const wd = DAY_KEYS[date.getDay()];
+  return tt.teachers
+    .filter((t) => tt.timetable[t.id] && tt.timetable[t.id][wd] != null)
+    .map((t) => {
+      const hour = tt.timetable[t.id][wd];
+      const deadline = deadlineForHour(hour);
+      const punch = punchMap[t.id] == null ? null : punchMap[t.id];
+      const status = punch != null ? (punch <= deadline ? "Present" : "Late") : nowMin >= deadline ? "Absent" : "Waiting";
+      return {
+        id: t.id, name: t.name, dept: t.dept, subject: (tt.subjects[t.id] || {})[wd] || "—",
+        hour, firstClass: hour, deadline, punch, status,
+        delay: status === "Late" ? punch - deadline : null,
+      };
+    });
+}
 
 function monthStats(teacherId, todayRecord) {
-  const rows = buildHistory(teacherId, 30).filter(
-    (h) => h.date.getMonth() === DEMO_DATE.getMonth() && h.date.getFullYear() === DEMO_DATE.getFullYear()
-  );
-  if (todayRecord) rows.push({ date: DEMO_DATE, status: todayRecord.status, delay: todayRecord.delay });
+  const now = new Date();
+  const rows = historyRows().filter((r) => r.id === teacherId && r.date.getMonth() === now.getMonth() && r.date.getFullYear() === now.getFullYear());
+  if (todayRecord && !rows.some((r) => dayKey(r.date) === dayKey(now))) rows.push({ date: now, status: todayRecord.status, delay: todayRecord.delay });
   const working = rows.filter((r) => r.status !== "Holiday");
   const lateRows = rows.filter((r) => r.status === "Late");
   const present = rows.filter((r) => r.status === "Present").length;
@@ -242,19 +232,17 @@ function monthStats(teacherId, todayRecord) {
   const leave = rows.filter((r) => r.status === "Leave").length;
   const totalLateMin = lateRows.reduce((a, b) => a + (b.delay || 0), 0);
   return {
-    month: MONTH_LABEL,
-    rows,
-    lateRows,
+    month: now.toLocaleDateString("en-IN", { month: "long", year: "numeric" }),
+    rows, lateRows,
     workingDays: working.length,
     late: lateRows.length,
-    present,
-    absent,
-    leave,
+    present, absent, leave,
     pct: working.length ? Math.round(((present + lateRows.length) / working.length) * 100) : 0,
     avgLate: lateRows.length ? Math.round(totalLateMin / lateRows.length) : 0,
     totalLateMin,
   };
 }
+
 
 /* ------------------------------- SMALL PRIMITIVES --------------------------- */
 
