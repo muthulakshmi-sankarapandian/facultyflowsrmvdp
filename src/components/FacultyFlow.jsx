@@ -312,16 +312,31 @@ function findSheetDate(grid, filename) {
   return null;
 }
 
+function dateFromToken(s) {
+  const m = String(s || "").match(/(\d{1,2})[\s._\-/](\d{1,2})[\s._\-/](\d{2,4})/);
+  if (!m) return null;
+  let y = Number(m[3]); if (y < 100) y += 2000;
+  const d = new Date(y, Number(m[2]) - 1, Number(m[1]));
+  return isNaN(d) || d.getFullYear() < 2000 ? null : d;
+}
+
 async function parsePastPunchFile(file, teachers) {
   const XLSX = await import("xlsx");
-  const buf = await file.arrayBuffer();
-  const wb = XLSX.read(buf, { type: "array", cellDates: true });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const grid = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
-  const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
-  return { map: punchRowsToMap(rows, teachers), date: findSheetDate(grid, file.name) };
-
+  const wb = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
+  const out = [];
+  for (const name of wb.SheetNames) {
+    const ws = wb.Sheets[name];
+    if (!ws) continue;
+    const grid = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+    const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
+    const map = punchRowsToMap(rows, teachers);
+    if (!Object.keys(map).length) continue;
+    const date = dateFromToken(name) || findSheetDate(grid, wb.SheetNames.length > 1 ? "" : file.name) || dateFromToken(file.name);
+    out.push({ sheet: name, map, date });
+  }
+  return out;
 }
+
 
 function mergeHistoryDay(key, records) {
   if (!records.length) return 0;
