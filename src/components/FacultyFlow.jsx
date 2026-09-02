@@ -86,29 +86,35 @@ const TEACHERS = [
   { id: "t14", name: "Dr. Ravi Shankar", dept: "MBA", subject: "Business Analytics" },
 ];
 
-// Reporting deadline = first class time − buffer (default 5 min), per weekday. null = no class (Holiday).
+const HOUR_1 = "08:00";
+const HOUR_2 = "08:50";
 const TIMETABLE = {
-  t1: { Mon: "09:00", Tue: "09:00", Wed: "10:00", Thu: "09:00", Fri: "11:00" },
-  t2: { Mon: "08:30", Tue: "10:00", Wed: "08:30", Thu: "10:00", Fri: "08:30" },
-  t3: { Mon: "09:15", Tue: null, Wed: "09:15", Thu: "09:15", Fri: "10:30" },
-  t4: { Mon: "10:00", Tue: "09:00", Wed: "09:00", Thu: null, Fri: "09:00" },
-  t5: { Mon: "08:30", Tue: "08:30", Wed: "11:00", Thu: "08:30", Fri: null },
-  t6: { Mon: "09:00", Tue: "09:00", Wed: "09:00", Thu: "10:30", Fri: "09:00" },
-  t7: { Mon: "08:30", Tue: "10:00", Wed: "08:30", Thu: "08:30", Fri: "10:00" },
-  t8: { Mon: null, Tue: "09:15", Wed: "09:15", Thu: "09:15", Fri: "09:15" },
-  t9: { Mon: "11:00", Tue: "11:00", Wed: null, Thu: "11:00", Fri: "11:00" },
-  t10: { Mon: "09:00", Tue: "09:00", Wed: "10:00", Thu: "09:00", Fri: "09:00" },
-  t11: { Mon: "08:30", Tue: "08:30", Wed: "08:30", Thu: "08:30", Fri: null },
-  t12: { Mon: "10:30", Tue: "09:00", Wed: "09:00", Thu: "09:00", Fri: "09:00" },
-  t13: { Mon: "09:15", Tue: "09:15", Wed: "09:15", Thu: null, Fri: "09:15" },
-  t14: { Mon: "09:00", Tue: "09:00", Wed: "09:00", Thu: "09:00", Fri: null },
+  t1: { Mon: "08:00", Tue: "08:50", Wed: "09:40", Thu: "08:00", Fri: "10:30" },
+  t2: { Mon: "08:50", Tue: "09:40", Wed: "08:00", Thu: "09:40", Fri: "08:50" },
+  t3: { Mon: "09:40", Tue: null, Wed: "08:50", Thu: "08:50", Fri: "10:30" },
+  t4: { Mon: "10:30", Tue: "08:00", Wed: "08:50", Thu: null, Fri: "08:00" },
+  t5: { Mon: "08:00", Tue: "08:00", Wed: "10:30", Thu: "08:50", Fri: null },
+  t6: { Mon: "08:50", Tue: "08:50", Wed: "08:00", Thu: "09:40", Fri: "08:50" },
+  t7: { Mon: "08:00", Tue: "09:40", Wed: "08:00", Thu: "08:00", Fri: "09:40" },
+  t8: { Mon: null, Tue: "08:50", Wed: "08:50", Thu: "09:40", Fri: "08:00" },
+  t9: { Mon: "10:30", Tue: "10:30", Wed: null, Thu: "09:40", Fri: "10:30" },
+  t10: { Mon: "08:50", Tue: "08:00", Wed: "09:40", Thu: "08:50", Fri: "08:00" },
+  t11: { Mon: "08:00", Tue: "08:00", Wed: "08:50", Thu: "08:00", Fri: null },
+  t12: { Mon: "09:40", Tue: "08:50", Wed: "08:00", Thu: "08:50", Fri: "09:40" },
+  t13: { Mon: "08:50", Tue: "09:40", Wed: "08:00", Thu: null, Fri: "08:50" },
+  t14: { Mon: "08:00", Tue: "08:50", Wed: "09:40", Thu: "08:00", Fri: null },
 };
-
-// Fixed demo reference date/time so the dashboard reads sensibly regardless of real-world clock.
-const DEMO_DATE = new Date(2026, 7, 31); // Monday, 31 August 2026 — a working day
+const DEMO_DATE = new Date(2026, 7, 31);
 const DEMO_WEEKDAY = "Mon";
-const DEMO_NOW_MIN = 8 * 60 + 42; // 08:42 AM
-const REPORTING_BUFFER = 5; // minutes before class counted as on time
+const DEMO_NOW_MIN = 8 * 60 + 42;
+const END_OF_DAY_MIN = 17 * 60;
+function deadlineFor(classTime) {
+  if (classTime == null) return null;
+  if (classTime === HOUR_1) return 7 * 60 + 55;
+  if (classTime === HOUR_2) return 8 * 60 + 40;
+  return 9 * 60;
+}
+
 
 function toMin(hhmm) {
   if (!hhmm) return null;
