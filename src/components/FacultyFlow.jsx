@@ -89,7 +89,6 @@ function dateLabel(d) {
 function pad2(n) { return String(n).padStart(2, "0"); }
 function dayKey(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
 function slugify(s) { return String(s).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }
-function normName(s) { return String(s).toLowerCase().replace(/\b(dr|mr|mrs|ms|prof|professor)\b/g, "").replace(/[^a-z]/g, ""); }
 function deadlineForHour(hour) { return hour === 1 ? 7 * 60 + 55 : hour === 2 ? 8 * 60 + 40 : 9 * 60; }
 function hourLabel(hour) { return hour == null ? "—" : hour === 1 ? "1st hr · 8:00 AM" : hour === 2 ? "2nd hr · 8:50 AM" : `Hour ${hour}`; }
 
