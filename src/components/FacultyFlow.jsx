@@ -65,56 +65,11 @@ const STATUS_META = {
   Holiday: { fg: "#5B6459", bg: "#EEF0EC", dot: "#8B9285" },
 };
 
-/* --------------------------------- SAMPLE DATA ------------------------------ */
+/* --------------------------------- DATA LAYER ------------------------------ */
 
-const DEPARTMENTS = ["Computer Science", "Electronics (ECE)", "Mechanical", "Civil", "MBA", "Mathematics", "Physics", "English"];
-
-const TEACHERS = [
-  { id: "t1", name: "Dr. Chitra Ramesh", dept: "Computer Science", subject: "Data Structures" },
-  { id: "t2", name: "Mr. Kumaresan Pillai", dept: "Electronics (ECE)", subject: "Digital Circuits" },
-  { id: "t3", name: "Mrs. Priya Narayanan", dept: "MBA", subject: "Marketing Management" },
-  { id: "t4", name: "Dr. Anand Krishnan", dept: "Mechanical", subject: "Thermodynamics" },
-  { id: "t5", name: "Ms. Divya Suresh", dept: "Civil", subject: "Structural Analysis" },
-  { id: "t6", name: "Mr. Vignesh Raja", dept: "Computer Science", subject: "Operating Systems" },
-  { id: "t7", name: "Mrs. Meenakshi Iyer", dept: "Mathematics", subject: "Discrete Mathematics" },
-  { id: "t8", name: "Dr. Bala Subramaniam", dept: "Physics", subject: "Applied Physics" },
-  { id: "t9", name: "Mrs. Lakshmi Prasad", dept: "English", subject: "Technical Communication" },
-  { id: "t10", name: "Mr. Arun Chezhian", dept: "Electronics (ECE)", subject: "Signals & Systems" },
-  { id: "t11", name: "Dr. Deepa Venkatesan", dept: "Computer Science", subject: "Database Systems" },
-  { id: "t12", name: "Mr. Sathish Kumar", dept: "Mechanical", subject: "Fluid Mechanics" },
-  { id: "t13", name: "Ms. Nandhini Raja", dept: "Civil", subject: "Surveying" },
-  { id: "t14", name: "Dr. Ravi Shankar", dept: "MBA", subject: "Business Analytics" },
-];
-
-const HOUR_1 = "08:00";
-const HOUR_2 = "08:50";
-const TIMETABLE = {
-  t1: { Mon: "08:00", Tue: "08:50", Wed: "09:40", Thu: "08:00", Fri: "10:30" },
-  t2: { Mon: "08:50", Tue: "09:40", Wed: "08:00", Thu: "09:40", Fri: "08:50" },
-  t3: { Mon: "09:40", Tue: null, Wed: "08:50", Thu: "08:50", Fri: "10:30" },
-  t4: { Mon: "10:30", Tue: "08:00", Wed: "08:50", Thu: null, Fri: "08:00" },
-  t5: { Mon: "08:00", Tue: "08:00", Wed: "10:30", Thu: "08:50", Fri: null },
-  t6: { Mon: "08:50", Tue: "08:50", Wed: "08:00", Thu: "09:40", Fri: "08:50" },
-  t7: { Mon: "08:00", Tue: "09:40", Wed: "08:00", Thu: "08:00", Fri: "09:40" },
-  t8: { Mon: null, Tue: "08:50", Wed: "08:50", Thu: "09:40", Fri: "08:00" },
-  t9: { Mon: "10:30", Tue: "10:30", Wed: null, Thu: "09:40", Fri: "10:30" },
-  t10: { Mon: "08:50", Tue: "08:00", Wed: "09:40", Thu: "08:50", Fri: "08:00" },
-  t11: { Mon: "08:00", Tue: "08:00", Wed: "08:50", Thu: "08:00", Fri: null },
-  t12: { Mon: "09:40", Tue: "08:50", Wed: "08:00", Thu: "08:50", Fri: "09:40" },
-  t13: { Mon: "08:50", Tue: "09:40", Wed: "08:00", Thu: null, Fri: "08:50" },
-  t14: { Mon: "08:00", Tue: "08:50", Wed: "09:40", Thu: "08:00", Fri: null },
-};
-const DEMO_DATE = new Date(2026, 7, 31);
-const DEMO_WEEKDAY = "Mon";
-const DEMO_NOW_MIN = 8 * 60 + 42;
-const END_OF_DAY_MIN = 17 * 60;
-function deadlineFor(classTime) {
-  if (classTime == null) return null;
-  if (classTime === HOUR_1) return 7 * 60 + 55;
-  if (classTime === HOUR_2) return 8 * 60 + 40;
-  return 9 * 60;
-}
-
+const DAY_KEYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const STATE_KEY = "ff_state";
+const HISTORY_KEY = "ff_history_store";
 
 function toMin(hhmm) {
   if (!hhmm) return null;
@@ -131,110 +86,145 @@ function minToLabel(min) {
 function dateLabel(d) {
   return d.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 }
+function pad2(n) { return String(n).padStart(2, "0"); }
+function dayKey(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+function slugify(s) { return String(s).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }
+function normName(s) { return String(s).toLowerCase().replace(/\b(dr|mr|mrs|ms|prof|professor)\b/g, "").replace(/[^a-z]/g, ""); }
+function deadlineForHour(hour) { return hour === 1 ? 7 * 60 + 55 : hour === 2 ? 8 * 60 + 40 : 9 * 60; }
+function hourLabel(hour) { return hour == null ? "—" : hour === 1 ? "1st hr · 8:00 AM" : hour === 2 ? "2nd hr · 8:50 AM" : `Hour ${hour}`; }
 
-// Deterministic pseudo-random generator so charts/history stay stable across renders.
-function seeded(seed) {
-  let s = seed % 2147483647;
-  if (s <= 0) s += 2147483646;
-  return () => (s = (s * 16807) % 2147483647) / 2147483647;
+function loadState() {
+  if (typeof window === "undefined") return {};
+  try { return JSON.parse(window.localStorage.getItem(STATE_KEY) || "{}"); } catch { return {}; }
 }
-
-const BASE_PUNCHES = {
-  t1: "07:58", t2: "08:44", t4: "09:07", t5: "07:51",
-  t7: "08:04", t10: "08:52", t11: "07:50", t12: "09:41", t14: "08:12",
-};
-const PENDING_PUNCHES = [
-  { id: "t13", time: "08:47" },
-  { id: "t6", time: "08:58" },
-  { id: "t3", time: "09:12" },
-];
-function punchSheet(syncCount) {
-  const sheet = { ...BASE_PUNCHES };
-  PENDING_PUNCHES.slice(0, syncCount).forEach((p) => { sheet[p.id] = p.time; });
-  return sheet;
+function persistState(patch) {
+  if (typeof window === "undefined") return;
+  try { window.localStorage.setItem(STATE_KEY, JSON.stringify({ ...loadState(), ...patch })); } catch { /* quota */ }
 }
-function computeStatus({ deadline, punch, nowMin, leave }) {
-  if (deadline == null) return "Holiday";
-  if (leave) return "Leave";
-  if (punch != null) return punch <= deadline ? "Present" : "Late";
-  if (nowMin >= END_OF_DAY_MIN) return "Absent";
-  return nowMin >= deadline ? "Absent" : "Waiting";
-}
-function buildTodayRecords(syncCount = 0, nowMin = DEMO_NOW_MIN, override = null) {
-  const sheet = override || punchSheet(syncCount);
-  return TEACHERS.filter((t) => TIMETABLE[t.id][DEMO_WEEKDAY] != null).map((t) => {
-    const classTime = TIMETABLE[t.id][DEMO_WEEKDAY];
-    const deadline = deadlineFor(classTime);
-    const leave = !override && t.id === "t8";
-    const punchRaw = sheet[t.id];
-    const punch = leave ? null : (punchRaw ? toMin(punchRaw) : null);
-    const status = computeStatus({ deadline, punch, nowMin: override ? END_OF_DAY_MIN : nowMin, leave });
-    const delay = status === "Late" ? punch - deadline : status === "Present" ? Math.max(deadline - punch, 0) * -1 : null;
-    return { id: t.id, name: t.name, dept: t.dept, subject: t.subject, firstClass: classTime, deadline, punch, status, delay };
-  });
-}
-async function parsePunchFile(file) {
-  const XLSX = await import("xlsx");
-  const buf = await file.arrayBuffer();
-  const wb = XLSX.read(buf, { type: "array" });
-  const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
-  const map = {};
-  rows.forEach((r) => {
-    const vals = Object.entries(r);
-    const nameEntry = vals.find(([k]) => /name|teacher|staff/i.test(k));
-    const timeEntry = vals.find(([k]) => /time|punch|in/i.test(k));
-    if (!nameEntry || !timeEntry) return;
-    const name = String(nameEntry[1]).trim().toLowerCase();
-    const time = String(timeEntry[1]).trim().slice(0, 5);
-    if (!name || !/^\d{1,2}:\d{2}$/.test(time)) return;
-    const t = TEACHERS.find((x) => x.name.toLowerCase() === name || x.name.toLowerCase().includes(name) || name.includes(x.name.toLowerCase()));
-    if (t && TIMETABLE[t.id][DEMO_WEEKDAY] != null) map[t.id] = time.padStart(5, "0");
-  });
-  return map;
-}
-const HISTORY_KEY = "ff_history_store";
 function loadHistoryStore() {
   if (typeof window === "undefined") return {};
   try { return JSON.parse(window.localStorage.getItem(HISTORY_KEY) || "{}"); } catch { return {}; }
 }
-function saveHistoryDay(dateKey, records) {
-  if (typeof window === "undefined" || !records.length) return;
-  const store = loadHistoryStore();
-  store[dateKey] = records.map((r) => ({ id: r.id, teacher: r.name, dept: r.dept, status: r.status, delay: r.delay, deadline: r.deadline, punch: r.punch }));
+function writeHistoryStore(store) {
+  if (typeof window === "undefined") return;
   try { window.localStorage.setItem(HISTORY_KEY, JSON.stringify(store)); } catch { /* quota */ }
 }
-function buildHistory(teacherId, days = 30) {
-  const rand = seeded(teacherId.charCodeAt(0) * 97 + teacherId.length * 13 + days);
-  const out = [];
-  let d = new Date(DEMO_DATE);
-  while (out.length < days) {
-    d.setDate(d.getDate() - 1);
-    const dow = d.getDay();
-    if (dow === 0 || dow === 6) continue;
-    const wd = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dow];
-    const classTime = TIMETABLE[teacherId][wd];
-    if (classTime == null) { out.push({ date: new Date(d), status: "Holiday", delay: null, deadline: null, punch: null }); continue; }
-    const deadline = deadlineFor(classTime);
-    const r = rand();
-    let status, delay, punch;
-    if (r < 0.72) { status = "Present"; delay = -Math.round(rand() * 6); punch = deadline + delay; }
-    else if (r < 0.88) { status = "Late"; delay = Math.round(3 + rand() * 22); punch = deadline + delay; }
-    else if (r < 0.95) { status = "Absent"; delay = null; punch = null; }
-    else { status = "Leave"; delay = null; punch = null; }
-    out.push({ date: new Date(d), status, delay, deadline, punch });
-  }
-  return out.reverse();
+function saveHistoryDay(key, records) {
+  if (!records.length) return;
+  const store = loadHistoryStore();
+  store[key] = records.map((r) => ({ id: r.id, teacher: r.name, dept: r.dept, status: r.status, delay: r.delay, deadline: r.deadline, punch: r.punch }));
+  writeHistoryStore(store);
+}
+function deleteHistoryDay(key) {
+  const store = loadHistoryStore();
+  if (store[key] == null) return;
+  delete store[key];
+  writeHistoryStore(store);
+}
+function historyRows() {
+  const store = loadHistoryStore();
+  const rows = [];
+  Object.entries(store).forEach(([key, recs]) => {
+    const [y, m, d] = key.split("-").map(Number);
+    if (!y || !m || !d) return;
+    const date = new Date(y, m - 1, d);
+    (recs || []).forEach((r) => rows.push({ ...r, date }));
+  });
+  return rows;
 }
 
+async function parseTimetableFile(file) {
+  const XLSX = await import("xlsx");
+  const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+  const txt = (v) => (v == null ? "" : String(v).replace(/\s+/g, " ").trim());
+  let dept = "";
+  for (const n of wb.SheetNames) {
+    const g = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: null, raw: false });
+    for (const row of g) {
+      const i = (row || []).findIndex((v) => /^department\s*:?$/i.test(txt(v)));
+      if (i >= 0) {
+        const rest = row.slice(i + 1).find((v) => txt(v));
+        if (rest) { dept = txt(rest); break; }
+      }
+    }
+    if (dept) break;
+  }
+  const grid = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: null, raw: false });
+  const teachers = [], timetable = {}, subjects = {};
+  for (let r = 1; r < grid.length; r++) {
+    const row = grid[r] || [];
+    for (let cc = 0; cc < row.length; cc++) {
+      let header = true;
+      for (let h = 1; h <= 7; h++) if (txt(row[cc + h]) !== String(h)) { header = false; break; }
+      if (!header) continue;
+      const name = txt((grid[r - 1] || [])[cc]);
+      if (name.length < 4 || !/[a-z]{3}/i.test(name)) continue;
+      const id = slugify(name);
+      if (timetable[id]) continue;
+      const days = {}, subs = {};
+      for (let i = 0; i < 5; i++) {
+        const dr = grid[r + 1 + i] || [];
+        for (let h = 1; h <= 7; h++) {
+          const v = txt(dr[cc + h]);
+          if (v) { days[DAY_KEYS[i + 1]] = h; subs[DAY_KEYS[i + 1]] = v; break; }
+        }
+      }
+      if (!Object.keys(days).length) continue;
+      teachers.push({ id, name, dept: dept || "Faculty" });
+      timetable[id] = days;
+      subjects[id] = subs;
+    }
+  }
+  if (!teachers.length) throw new Error("no faculty blocks found");
+  return { teachers, timetable, subjects, dept };
+}
 
-/* Month-to-date stats for a single teacher (used by search + drawer). */
-const MONTH_LABEL = DEMO_DATE.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+async function parsePunchFile(file, teachers) {
+  const XLSX = await import("xlsx");
+  const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+  const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+  const map = {};
+  rows.forEach((row) => {
+    const entries = Object.entries(row);
+    const nameEntry = entries.find(([k]) => /name|teacher|staff|faculty|employee/i.test(k));
+    const timeEntry = entries.find(([k]) => /time|punch|in\b/i.test(k));
+    if (!nameEntry || !timeEntry) return;
+    const nm = normName(nameEntry[1]);
+    const match = String(timeEntry[1]).match(/(\d{1,2}):(\d{2})/);
+    if (!nm || !match) return;
+    const t = teachers.find((x) => {
+      const a = normName(x.name);
+      return a === nm || (a.length > 4 && nm.includes(a)) || (nm.length > 4 && a.includes(nm));
+    });
+    if (!t) return;
+    const min = Number(match[1]) * 60 + Number(match[2]);
+    if (map[t.id] == null || min < map[t.id]) map[t.id] = min;
+  });
+  return map;
+}
+
+function buildRecords(tt, punchMap, date, nowMin) {
+  if (!tt || !punchMap) return [];
+  const wd = DAY_KEYS[date.getDay()];
+  return tt.teachers
+    .filter((t) => tt.timetable[t.id] && tt.timetable[t.id][wd] != null)
+    .map((t) => {
+      const hour = tt.timetable[t.id][wd];
+      const deadline = deadlineForHour(hour);
+      const punch = punchMap[t.id] == null ? null : punchMap[t.id];
+      const status = punch != null ? (punch <= deadline ? "Present" : "Late") : nowMin >= deadline ? "Absent" : "Waiting";
+      return {
+        id: t.id, name: t.name, dept: t.dept, subject: (tt.subjects[t.id] || {})[wd] || "—",
+        hour, firstClass: hour, deadline, punch, status,
+        delay: status === "Late" ? punch - deadline : null,
+      };
+    });
+}
 
 function monthStats(teacherId, todayRecord) {
-  const rows = buildHistory(teacherId, 30).filter(
-    (h) => h.date.getMonth() === DEMO_DATE.getMonth() && h.date.getFullYear() === DEMO_DATE.getFullYear()
-  );
-  if (todayRecord) rows.push({ date: DEMO_DATE, status: todayRecord.status, delay: todayRecord.delay });
+  const now = new Date();
+  const rows = historyRows().filter((r) => r.id === teacherId && r.date.getMonth() === now.getMonth() && r.date.getFullYear() === now.getFullYear());
+  if (todayRecord && !rows.some((r) => dayKey(r.date) === dayKey(now))) rows.push({ date: now, status: todayRecord.status, delay: todayRecord.delay });
   const working = rows.filter((r) => r.status !== "Holiday");
   const lateRows = rows.filter((r) => r.status === "Late");
   const present = rows.filter((r) => r.status === "Present").length;
@@ -242,19 +232,17 @@ function monthStats(teacherId, todayRecord) {
   const leave = rows.filter((r) => r.status === "Leave").length;
   const totalLateMin = lateRows.reduce((a, b) => a + (b.delay || 0), 0);
   return {
-    month: MONTH_LABEL,
-    rows,
-    lateRows,
+    month: now.toLocaleDateString("en-IN", { month: "long", year: "numeric" }),
+    rows, lateRows,
     workingDays: working.length,
     late: lateRows.length,
-    present,
-    absent,
-    leave,
+    present, absent, leave,
     pct: working.length ? Math.round(((present + lateRows.length) / working.length) * 100) : 0,
     avgLate: lateRows.length ? Math.round(totalLateMin / lateRows.length) : 0,
     totalLateMin,
   };
 }
+
 
 /* ------------------------------- SMALL PRIMITIVES --------------------------- */
 
@@ -308,12 +296,14 @@ export default function FacultyFlowApp() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [clock, setClock] = useState(new Date());
-  const [lastSync, setLastSync] = useState(new Date(Date.now() - 60000));
+  const [lastSync, setLastSync] = useState(new Date());
   const [toasts, setToasts] = useState([]);
   const [drawerTeacher, setDrawerTeacher] = useState(null);
-  const [syncCount, setSyncCount] = useState(0);
   const [watchConnected, setWatchConnected] = useState(true);
-  const [sources, setSources] = useState({ timetable: "timetable-aug-2026.xlsx", punch: "punch-31-08-2026.xlsx" });
+  const [tt, setTt] = useState(null);
+  const [punchMap, setPunchMap] = useState(null);
+  const [sources, setSources] = useState({ timetable: "— no timetable —", punch: "— no punch sheet —" });
+  const [historyKey, setHistoryKey] = useState(0);
 
   const pushToast = useCallback((title, desc, kind = "success") => {
     const id = Math.random().toString(36).slice(2);
@@ -326,14 +316,18 @@ export default function FacultyFlowApp() {
     return () => clearInterval(iv);
   }, []);
 
+  useEffect(() => {
+    const saved = loadState();
+    if (saved.tt) { setTt(saved.tt); setSources((s) => ({ ...s, timetable: saved.ttName || "timetable.xlsx" })); }
+    if (saved.punch && saved.punchDate === dayKey(new Date())) { setPunchMap(saved.punch); setSources((s) => ({ ...s, punch: saved.punchName || "punch-sheet.xlsx" })); }
+  }, []);
+
   const syncNow = useCallback((manual) => {
-    setSyncCount((n) => {
-      const next = Math.min(n + 1, PENDING_PUNCHES.length);
-      setLastSync(new Date());
-      if (next > n) pushToast("New punch record imported", `${PENDING_PUNCHES[next - 1].id.toUpperCase()} punched at ${PENDING_PUNCHES[next - 1].time}.`, "sync");
-      else if (manual) pushToast("Already up to date", "No new punch records found in the watched folder.", "info");
-      return next;
-    });
+    const saved = loadState();
+    setLastSync(new Date());
+    if (saved.punch && saved.punchDate === dayKey(new Date())) setPunchMap(saved.punch);
+    setHistoryKey((k) => k + 1);
+    if (manual) pushToast("Sync complete", "Attendance recalculated from the current data sources.", "sync");
   }, [pushToast]);
 
   useEffect(() => {
@@ -347,22 +341,43 @@ export default function FacultyFlowApp() {
     return () => clearTimeout(t);
   }, [watchConnected, pushToast]);
 
-  const [cleared, setCleared] = useState(false);
-  const [punchOverride, setPunchOverride] = useState(null);
-  const todayRecords = useMemo(() => (cleared ? [] : buildTodayRecords(syncCount, DEMO_NOW_MIN, punchOverride)), [syncCount, cleared, punchOverride]);
-  useEffect(() => { if (todayRecords.length) saveHistoryDay(DEMO_DATE.toDateString(), todayRecords); }, [todayRecords]);
+  const nowMin = clock.getHours() * 60 + clock.getMinutes();
+  const todayRecords = useMemo(() => buildRecords(tt, punchMap, clock, nowMin), [tt, punchMap, nowMin]);
+  const teachers = tt ? tt.teachers : [];
+
+  useEffect(() => {
+    if (!todayRecords.length || !punchMap) return;
+    saveHistoryDay(dayKey(new Date()), todayRecords);
+    setHistoryKey((k) => k + 1);
+  }, [todayRecords, punchMap]);
+
   const clearPunchSheet = useCallback(() => {
-    setCleared(true); setPunchOverride(null); setSyncCount(0);
+    setPunchMap(null);
+    persistState({ punch: null, punchName: null, punchDate: null });
+    deleteHistoryDay(dayKey(new Date()));
     setSources((s) => ({ ...s, punch: "— no punch sheet —" }));
+    setHistoryKey((k) => k + 1);
     pushToast("Punch sheet cleared", "Today's view is empty. Past days remain in History.", "info");
   }, [pushToast]);
-  const applyPunchUpload = useCallback((map, fileName) => {
-    setPunchOverride(map); setCleared(false); setSyncCount(0); setLastSync(new Date());
-    setSources((s) => ({ ...s, punch: fileName }));
-    pushToast("Punch sheet applied", `${Object.keys(map).length} punches matched against today's timetable.`, "success");
+
+  const applyTimetableUpload = useCallback(async (file) => {
+    const parsed = await parseTimetableFile(file);
+    setTt(parsed);
+    persistState({ tt: parsed, ttName: file.name });
+    setSources((s) => ({ ...s, timetable: file.name }));
+    setLastSync(new Date());
+    pushToast("Timetable replaced", `${parsed.teachers.length} faculty schedules imported and applied.`, "success");
   }, [pushToast]);
 
-
+  const applyPunchUpload = useCallback(async (file) => {
+    if (!tt) { pushToast("Upload a timetable first", "Punch data is verified against the active timetable.", "error"); return; }
+    const map = await parsePunchFile(file, tt.teachers);
+    setPunchMap(map);
+    persistState({ punch: map, punchName: file.name, punchDate: dayKey(new Date()) });
+    setSources((s) => ({ ...s, punch: file.name }));
+    setLastSync(new Date());
+    pushToast("Punch sheet applied", `${Object.keys(map).length} punches matched against today's timetable.`, "success");
+  }, [pushToast, tt]);
 
   const summary = useMemo(() => {
     const scheduled = todayRecords.filter((r) => r.status !== "Holiday").length;
@@ -371,6 +386,7 @@ export default function FacultyFlowApp() {
     const pct = scheduled ? Math.round(((present + late) / scheduled) * 100) : 0;
     return { scheduled, present, late, absent, waiting, leave, pct };
   }, [todayRecords]);
+
 
   const shell = { background: c.canvas, color: c.ink, minHeight: "100vh", fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif" };
 
@@ -391,7 +407,7 @@ export default function FacultyFlowApp() {
 
         <div className="flex-1 min-w-0">
           <TopHeader
-            c={c} clock={clock} lastSync={lastSync} summary={summary} todayRecords={todayRecords}
+            c={c} clock={clock} lastSync={lastSync} summary={summary} todayRecords={todayRecords} teachers={teachers}
             themeMode={themeMode} setThemeMode={setThemeMode}
             onMenu={() => setMobileNavOpen(true)}
             onManualNote={() => syncNow(true)}
@@ -403,13 +419,13 @@ export default function FacultyFlowApp() {
                 <motion.div key="dash" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}>
                   <Dashboard c={c} records={todayRecords} summary={summary} onOpenTeacher={setDrawerTeacher}
                     pushToast={pushToast} syncNow={syncNow} lastSync={lastSync} watchConnected={watchConnected}
-                    setWatchConnected={setWatchConnected} sources={sources} setSources={setSources}
-                    clearPunchSheet={clearPunchSheet} applyPunchUpload={applyPunchUpload} />
+                    setWatchConnected={setWatchConnected} sources={sources} teachers={teachers}
+                    clearPunchSheet={clearPunchSheet} applyPunchUpload={applyPunchUpload} applyTimetableUpload={applyTimetableUpload} />
                 </motion.div>
               )}
               {page === "history" && (
                 <motion.div key="hist" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}>
-                  <HistoryPage c={c} onOpenTeacher={setDrawerTeacher} pushToast={pushToast} />
+                  <HistoryPage c={c} onOpenTeacher={setDrawerTeacher} pushToast={pushToast} teachers={teachers} refreshKey={historyKey} />
                 </motion.div>
               )}
               {page === "settings" && (
@@ -423,7 +439,8 @@ export default function FacultyFlowApp() {
         </div>
       </div>
 
-      <TeacherDrawer c={c} teacherId={drawerTeacher} onClose={() => setDrawerTeacher(null)} todayRecords={todayRecords} />
+      <TeacherDrawer c={c} teacherId={drawerTeacher} onClose={() => setDrawerTeacher(null)} todayRecords={todayRecords} teachers={teachers} />
+
       <ToastStack c={c} toasts={toasts} />
     </div>
   );
@@ -517,7 +534,7 @@ function Sidebar({ c, page, setPage, open, setOpen, mobileOpen, setMobileOpen })
 
 /* -------------------------------- TOP HEADER --------------------------------- */
 
-function TopHeader({ c, clock, lastSync, summary, themeMode, setThemeMode, onMenu, onManualNote, todayRecords }) {
+function TopHeader({ c, clock, lastSync, summary, themeMode, setThemeMode, onMenu, onManualNote, todayRecords, teachers }) {
   const timeStr = clock.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
   const syncStr = lastSync.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
 
@@ -530,11 +547,11 @@ function TopHeader({ c, clock, lastSync, summary, themeMode, setThemeMode, onMen
 
         <div className="min-w-0">
           <div className="text-[15px] font-bold leading-tight" style={{ fontFamily: "'Inter Tight', Inter, sans-serif" }}>Today's Teacher Attendance</div>
-          <div className="text-[12px] leading-tight" style={{ color: c.inkFaint }}>{dateLabel(DEMO_DATE)}</div>
+          <div className="text-[12px] leading-tight" style={{ color: c.inkFaint }}>{dateLabel(clock)}</div>
         </div>
 
         <div className="hidden md:block ml-6 flex-1 max-w-sm">
-          <TeacherSearch c={c} todayRecords={todayRecords} />
+          <TeacherSearch c={c} todayRecords={todayRecords} teachers={teachers} />
         </div>
 
         <div className="ml-auto flex items-center gap-2 sm:gap-4">
@@ -574,23 +591,24 @@ function TopHeader({ c, clock, lastSync, summary, themeMode, setThemeMode, onMen
 
 /* --------------------------------- DASHBOARD ---------------------------------- */
 
-function Dashboard({ c, records, summary, onOpenTeacher, pushToast, syncNow, lastSync, watchConnected, setWatchConnected, sources, setSources, clearPunchSheet, applyPunchUpload }) {
+function Dashboard({ c, records, summary, onOpenTeacher, pushToast, syncNow, lastSync, watchConnected, setWatchConnected, sources, clearPunchSheet, applyPunchUpload, applyTimetableUpload, teachers }) {
   return (
     <div className="space-y-6">
       <div className="md:hidden">
-        <TeacherSearch c={c} todayRecords={records} />
+        <TeacherSearch c={c} todayRecords={records} teachers={teachers} />
       </div>
       <AttendanceTable c={c} records={records} onOpenTeacher={onOpenTeacher} pushToast={pushToast} clearPunchSheet={clearPunchSheet} />
       <SummarySection c={c} summary={summary} />
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
         <AttentionPanel c={c} records={records} onOpenTeacher={onOpenTeacher} />
         <UploadCard c={c} pushToast={pushToast} syncNow={syncNow} lastSync={lastSync}
-          watchConnected={watchConnected} setWatchConnected={setWatchConnected} sources={sources} setSources={setSources}
-          applyPunchUpload={applyPunchUpload} />
+          watchConnected={watchConnected} setWatchConnected={setWatchConnected} sources={sources}
+          applyPunchUpload={applyPunchUpload} applyTimetableUpload={applyTimetableUpload} teacherCount={teachers.length} />
       </div>
     </div>
   );
 }
+
 
 
 function SummarySection({ c, summary }) {
@@ -707,7 +725,7 @@ function AttentionPanel({ c, records, onOpenTeacher }) {
   );
 }
 
-function UploadCard({ c, pushToast, syncNow, lastSync, watchConnected, setWatchConnected, sources, setSources, applyPunchUpload }) {
+function UploadCard({ c, pushToast, syncNow, lastSync, watchConnected, setWatchConnected, sources, applyPunchUpload, applyTimetableUpload, teacherCount }) {
   const [refreshing, setRefreshing] = useState(false);
   const ttRef = React.useRef(null);
   const psRef = React.useRef(null);
@@ -717,17 +735,20 @@ function UploadCard({ c, pushToast, syncNow, lastSync, watchConnected, setWatchC
     if (!f) return;
     if (kind === "punch") {
       try {
-        const map = await parsePunchFile(f);
-        applyPunchUpload(map, f.name);
+        await applyPunchUpload(f);
       } catch {
         pushToast("Could not read punch sheet", "Expected columns for teacher name and punch time.", "error");
       }
       return;
     }
-    setSources((s) => ({ ...s, timetable: f.name }));
-    pushToast("Timetable replaced", `${f.name} imported and applied.`, "success");
+    try {
+      await applyTimetableUpload(f);
+    } catch {
+      pushToast("Could not read timetable", "Expected faculty blocks with hour columns 1-7.", "error");
+    }
   };
   const doRefresh = () => { setRefreshing(true); syncNow(true); setTimeout(() => setRefreshing(false), 800); };
+
   return (
     <div className="rounded-2xl p-5" style={{ background: c.surface, border: `1px solid ${c.border}` }}>
       <h3 className="text-[13px] font-bold mb-3" style={{ fontFamily: "'Inter Tight', Inter, sans-serif" }}>Data sources</h3>
@@ -738,7 +759,7 @@ function UploadCard({ c, pushToast, syncNow, lastSync, watchConnected, setWatchC
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-[12.5px] font-semibold truncate">Timetable</div>
-            <div className="text-[11px] truncate" style={{ color: c.inkFaint }}>{sources.timetable} · 14 teachers</div>
+            <div className="text-[11px] truncate" style={{ color: c.inkFaint }}>{sources.timetable} · {teacherCount} teachers</div>
           </div>
           <input ref={ttRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={replace("timetable")} />
           <button onClick={() => ttRef.current?.click()}
@@ -900,7 +921,7 @@ function AttendanceTable({ c, records, onOpenTeacher, pushToast, clearPunchSheet
           </div>
           <button
             onClick={() => {
-              exportCSV(filtered.map((r) => ({ Teacher: r.name, Department: r.dept, Subject: r.subject, FirstClass: minToLabel(toMin(r.firstClass) ?? null), Deadline: minToLabel(r.deadline), Punch: minToLabel(r.punch), Status: r.status })), "faculty-flow-today.csv");
+              exportCSV(filtered.map((r) => ({ Teacher: r.name, Department: r.dept, Subject: r.subject, FirstClass: hourLabel(r.hour), Deadline: minToLabel(r.deadline), Punch: minToLabel(r.punch), Status: r.status })), "faculty-flow-today.csv");
               pushToast("Export completed", "Today's attendance was downloaded as CSV.", "success");
             }}
             className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: c.brand, color: "#fff" }}>
@@ -937,7 +958,7 @@ function AttendanceTable({ c, records, onOpenTeacher, pushToast, clearPunchSheet
                 {col("name") && <td className="px-4 py-3 font-semibold whitespace-nowrap">{r.name}</td>}
                 {col("dept") && <td className="px-4 py-3 whitespace-nowrap" style={{ color: c.inkMuted }}>{r.dept}</td>}
                 {col("subject") && <td className="px-4 py-3 whitespace-nowrap" style={{ color: c.inkMuted }}>{r.subject}</td>}
-                {col("firstClass") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkMuted }}>{r.firstClass ? minToLabel(toMin(r.firstClass)) : "—"}</td>}
+                {col("firstClass") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkMuted }}>{hourLabel(r.hour)}</td>}
                 {col("deadline") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkMuted }}>{minToLabel(r.deadline)}</td>}
                 {col("punch") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkMuted }}>{minToLabel(r.punch)}</td>}
                 {col("delay") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: r.status === "Late" ? STATUS_META.Late.fg : c.inkFaint }}>{r.status === "Late" ? `+${r.delay} min` : "—"}</td>}
@@ -973,10 +994,10 @@ function Th({ c, label, onClick, active, dir, sticky }) {
 
 /* -------------------------------- TEACHER DRAWER ------------------------------- */
 
-function TeacherDrawer({ c, teacherId, onClose, todayRecords }) {
-  const teacher = TEACHERS.find((t) => t.id === teacherId);
+function TeacherDrawer({ c, teacherId, onClose, todayRecords, teachers = [] }) {
+  const teacher = teachers.find((t) => t.id === teacherId);
   const today = todayRecords.find((r) => r.id === teacherId);
-  const history = useMemo(() => (teacherId ? buildHistory(teacherId, 30) : []), [teacherId]);
+  const history = useMemo(() => (teacherId ? historyRows().filter((r) => r.id === teacherId).sort((a, b) => a.date - b.date).slice(-30) : []), [teacherId]);
   const mStats = useMemo(() => (teacherId ? monthStats(teacherId, today) : null), [teacherId, today]);
 
   const stats = useMemo(() => {
@@ -994,6 +1015,7 @@ function TeacherDrawer({ c, teacherId, onClose, todayRecords }) {
     delay: h.status === "Late" ? h.delay : h.status === "Absent" ? null : 0,
     status: h.status,
   }));
+
 
   return (
     <AnimatePresence>
@@ -1022,7 +1044,7 @@ function TeacherDrawer({ c, teacherId, onClose, todayRecords }) {
                   {today && <Badge status={today.status} />}
                 </div>
                 <div className="grid grid-cols-2 gap-3 text-[12.5px]">
-                  <div><div style={{ color: c.inkFaint }} className="text-[11px]">Subject</div><div className="font-semibold">{teacher.subject}</div></div>
+                  <div><div style={{ color: c.inkFaint }} className="text-[11px]">Subject</div><div className="font-semibold">{today?.subject || "—"}</div></div>
                   <div><div style={{ color: c.inkFaint }} className="text-[11px]">Reporting time</div><div className="font-semibold ff-mono">{today ? minToLabel(today.deadline) : "—"}</div></div>
                   <div><div style={{ color: c.inkFaint }} className="text-[11px]">Punch time</div><div className="font-semibold ff-mono">{today ? minToLabel(today.punch) : "—"}</div></div>
                   <div><div style={{ color: c.inkFaint }} className="text-[11px]">Delay</div><div className="font-semibold ff-mono">{today?.status === "Late" ? `+${today.delay} min` : "—"}</div></div>
@@ -1033,7 +1055,7 @@ function TeacherDrawer({ c, teacherId, onClose, todayRecords }) {
                 <div className="grid grid-cols-4 gap-2.5">
                   <StatMini c={c} label="Attendance" value={`${stats.pct}%`} tone={c.brand} />
                   <StatMini c={c} label="Late (30d)" value={stats.late} tone={STATUS_META.Late.fg} />
-                  <StatMini c={c} label={`Late in ${DEMO_DATE.toLocaleDateString("en-IN", { month: "short" })}`} value={mStats.late} tone={STATUS_META.Late.fg} />
+                  <StatMini c={c} label="Late this month" value={mStats.late} tone={STATUS_META.Late.fg} />
                   <StatMini c={c} label="Absent (30d)" value={stats.absent} tone={STATUS_META.Absent.fg} />
                 </div>
               )}
@@ -1102,25 +1124,14 @@ function StatMini({ c, label, value, tone }) {
 function toDateInput(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
 function fromDateInput(v) { const [y, m, d] = v.split("-").map(Number); return new Date(y, m - 1, d); }
 
-function HistoryPage({ c, onOpenTeacher, pushToast }) {
-  const [startDate, setStartDate] = useState(toDateInput(new Date(DEMO_DATE.getFullYear(), DEMO_DATE.getMonth(), 1)));
-  const [endDate, setEndDate] = useState(toDateInput(DEMO_DATE));
+function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey }) {
+  const today = new Date();
+  const [startDate, setStartDate] = useState(toDateInput(new Date(today.getFullYear(), today.getMonth(), 1)));
+  const [endDate, setEndDate] = useState(toDateInput(today));
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
 
-  const allRows = useMemo(() => {
-    const rows = [];
-    TEACHERS.forEach((t) => {
-      buildHistory(t.id, 26).forEach((h) => rows.push({ ...h, teacher: t.name, dept: t.dept, id: t.id }));
-    });
-    const store = loadHistoryStore();
-    Object.entries(store).forEach(([dateKey, recs]) => {
-      const d = new Date(dateKey);
-      if (isNaN(d)) return;
-      recs.forEach((r) => rows.push({ ...r, date: d }));
-    });
-    return rows;
-  }, []);
+  const allRows = useMemo(() => historyRows(), [refreshKey]);
 
   const rangeRows = useMemo(() => {
     const s = fromDateInput(startDate);
@@ -1132,8 +1143,10 @@ function HistoryPage({ c, onOpenTeacher, pushToast }) {
   const matchedTeacher = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return null;
-    return TEACHERS.find((t) => t.name.toLowerCase().includes(q)) || null;
-  }, [query]);
+    const pool = teachers.length ? teachers : allRows.map((r) => ({ id: r.id, name: r.teacher, dept: r.dept }));
+    return pool.find((t) => t.name.toLowerCase().includes(q)) || null;
+  }, [query, teachers, allRows]);
+
 
   const scopedRows = useMemo(() => (matchedTeacher ? rangeRows.filter((r) => r.id === matchedTeacher.id) : rangeRows), [rangeRows, matchedTeacher]);
   const tableRows = useMemo(() => [...scopedRows]
@@ -1504,7 +1517,7 @@ function ToastStack({ c, toasts }) {
 }
 /* ------------------------------ TEACHER SEARCH -------------------------------- */
 
-function TeacherSearch({ c, todayRecords }) {
+function TeacherSearch({ c, todayRecords, teachers = [] }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState(null);
@@ -1512,13 +1525,12 @@ function TeacherSearch({ c, todayRecords }) {
   const matches = useMemo(() => {
     const s = q.trim().toLowerCase();
     if (!s) return [];
-    return TEACHERS.filter(
-      (t) => t.name.toLowerCase().includes(s) || t.dept.toLowerCase().includes(s) || t.subject.toLowerCase().includes(s)
-    ).slice(0, 6);
-  }, [q]);
+    return teachers.filter((t) => t.name.toLowerCase().includes(s) || (t.dept || "").toLowerCase().includes(s)).slice(0, 6);
+  }, [q, teachers]);
 
   const today = selected ? todayRecords.find((r) => r.id === selected.id) : null;
   const ms = useMemo(() => (selected ? monthStats(selected.id, today) : null), [selected, today]);
+
 
   return (
     <div className="relative w-full">
@@ -1552,7 +1564,7 @@ function TeacherSearch({ c, todayRecords }) {
                 >
                   <div className="min-w-0 flex-1">
                     <div className="text-[12.5px] font-semibold truncate">{t.name}</div>
-                    <div className="text-[11px] truncate" style={{ color: c.inkFaint }}>{t.dept} · {t.subject}</div>
+                    <div className="text-[11px] truncate" style={{ color: c.inkFaint }}>{t.dept}</div>
                   </div>
                   <span className="text-[11px] font-semibold shrink-0 px-2 py-0.5 rounded-full"
                     style={{ color: STATUS_META.Late.fg, background: STATUS_META.Late.bg }}>
@@ -1584,7 +1596,7 @@ function TeacherSearch({ c, todayRecords }) {
                 <div className="min-w-0 flex-1">
                   <div className="text-[15px] font-bold truncate" style={{ fontFamily: "'Inter Tight', Inter, sans-serif" }}>{selected.name}</div>
                   <div className="text-[12px] flex items-center gap-1" style={{ color: c.inkFaint }}>
-                    <Building2 size={11} /> {selected.dept} · {selected.subject}
+                    <Building2 size={11} /> {selected.dept}
                   </div>
                 </div>
                 {today && <Badge status={today.status} />}
