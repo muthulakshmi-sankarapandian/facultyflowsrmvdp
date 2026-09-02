@@ -256,25 +256,32 @@ async function parseTimetableFile(file) {
   return { teachers, timetable, subjects, dept };
 }
 
+function pickEntry(entries, tests) {
+  for (const re of tests) { const e = entries.find(([k]) => re.test(String(k))); if (e) return e; }
+  return null;
+}
 function punchRowsToMap(rows, teachers) {
   const map = {};
   rows.forEach((row) => {
-    const entries = Object.entries(row);
-    const nameEntry = entries.find(([k]) => /name|teacher|staff|faculty|employee/i.test(k));
-    const timeEntry = entries.find(([k]) => /time|punch|in\b/i.test(k));
+    const entries = Object.entries(row).filter(([k]) => k !== "__rowNum__");
+    const nameEntry = pickEntry(entries, [/faculty\s*name/i, /(teacher|staff|employee)\s*name/i, /^name$/i, /name/i]);
+    const timeEntry = pickEntry(entries, [/first\s*in/i, /in\s*time/i, /punch/i, /\bin\b/i, /time/i]);
     if (!nameEntry || !timeEntry) return;
     const raw = timeEntry[1];
+    if (raw == null || raw === "") return;
     const match = raw instanceof Date && !isNaN(raw)
-      ? [null, String(raw.getHours()), String(raw.getMinutes())]
+      ? [null, String(raw.getUTCHours()), String(raw.getUTCMinutes())]
       : String(raw).match(/(\d{1,2}):(\d{2})/);
     if (!match) return;
     const t = fuzzyFindTeacher(teachers, nameEntry[1]);
     if (!t) return;
     const min = Number(match[1]) * 60 + Number(match[2]);
+    if (!min) return;
     if (map[t.id] == null || min < map[t.id]) map[t.id] = min;
   });
   return map;
 }
+
 
 async function parsePunchFile(file, teachers) {
   const XLSX = await import("xlsx");
