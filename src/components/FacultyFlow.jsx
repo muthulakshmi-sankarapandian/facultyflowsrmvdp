@@ -707,7 +707,7 @@ function AttentionPanel({ c, records, onOpenTeacher }) {
   );
 }
 
-function UploadCard({ c, pushToast, syncNow, lastSync, watchConnected, setWatchConnected, sources, setSources, applyPunchUpload }) {
+function UploadCard({ c, pushToast, syncNow, lastSync, watchConnected, setWatchConnected, sources, applyPunchUpload, applyTimetableUpload, teacherCount }) {
   const [refreshing, setRefreshing] = useState(false);
   const ttRef = React.useRef(null);
   const psRef = React.useRef(null);
@@ -717,17 +717,20 @@ function UploadCard({ c, pushToast, syncNow, lastSync, watchConnected, setWatchC
     if (!f) return;
     if (kind === "punch") {
       try {
-        const map = await parsePunchFile(f);
-        applyPunchUpload(map, f.name);
+        await applyPunchUpload(f);
       } catch {
         pushToast("Could not read punch sheet", "Expected columns for teacher name and punch time.", "error");
       }
       return;
     }
-    setSources((s) => ({ ...s, timetable: f.name }));
-    pushToast("Timetable replaced", `${f.name} imported and applied.`, "success");
+    try {
+      await applyTimetableUpload(f);
+    } catch {
+      pushToast("Could not read timetable", "Expected faculty blocks with hour columns 1-7.", "error");
+    }
   };
   const doRefresh = () => { setRefreshing(true); syncNow(true); setTimeout(() => setRefreshing(false), 800); };
+
   return (
     <div className="rounded-2xl p-5" style={{ background: c.surface, border: `1px solid ${c.border}` }}>
       <h3 className="text-[13px] font-bold mb-3" style={{ fontFamily: "'Inter Tight', Inter, sans-serif" }}>Data sources</h3>
