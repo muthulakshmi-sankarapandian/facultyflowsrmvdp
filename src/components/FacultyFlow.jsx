@@ -900,7 +900,7 @@ function AttendanceTable({ c, records, onOpenTeacher, pushToast, clearPunchSheet
           </div>
           <button
             onClick={() => {
-              exportCSV(filtered.map((r) => ({ Teacher: r.name, Department: r.dept, Subject: r.subject, FirstClass: minToLabel(toMin(r.firstClass) ?? null), Deadline: minToLabel(r.deadline), Punch: minToLabel(r.punch), Status: r.status })), "faculty-flow-today.csv");
+              exportCSV(filtered.map((r) => ({ Teacher: r.name, Department: r.dept, Subject: r.subject, FirstClass: hourLabel(r.hour), Deadline: minToLabel(r.deadline), Punch: minToLabel(r.punch), Status: r.status })), "faculty-flow-today.csv");
               pushToast("Export completed", "Today's attendance was downloaded as CSV.", "success");
             }}
             className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: c.brand, color: "#fff" }}>
@@ -937,7 +937,7 @@ function AttendanceTable({ c, records, onOpenTeacher, pushToast, clearPunchSheet
                 {col("name") && <td className="px-4 py-3 font-semibold whitespace-nowrap">{r.name}</td>}
                 {col("dept") && <td className="px-4 py-3 whitespace-nowrap" style={{ color: c.inkMuted }}>{r.dept}</td>}
                 {col("subject") && <td className="px-4 py-3 whitespace-nowrap" style={{ color: c.inkMuted }}>{r.subject}</td>}
-                {col("firstClass") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkMuted }}>{r.firstClass ? minToLabel(toMin(r.firstClass)) : "—"}</td>}
+                {col("firstClass") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkMuted }}>{hourLabel(r.hour)}</td>}
                 {col("deadline") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkMuted }}>{minToLabel(r.deadline)}</td>}
                 {col("punch") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkMuted }}>{minToLabel(r.punch)}</td>}
                 {col("delay") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: r.status === "Late" ? STATUS_META.Late.fg : c.inkFaint }}>{r.status === "Late" ? `+${r.delay} min` : "—"}</td>}
