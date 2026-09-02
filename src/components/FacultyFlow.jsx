@@ -756,6 +756,27 @@ function exportCSV(rows, filename) {
   URL.revokeObjectURL(url);
 }
 
+async function exportXLSX(rows, filename, sheetName = "Report") {
+  const XLSX = await import("xlsx");
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 30));
+  XLSX.writeFile(wb, filename);
+}
+
+async function exportPDF(rows, filename, title) {
+  const { jsPDF } = await import("jspdf");
+  const autoTable = (await import("jspdf-autotable")).default;
+  const doc = new jsPDF({ orientation: "landscape" });
+  const head = [Object.keys(rows[0] || { Info: "" })];
+  const body = rows.map((r) => Object.values(r).map((v) => (v == null ? "" : String(v))));
+  doc.setFontSize(13);
+  doc.text(title, 14, 14);
+  autoTable(doc, { head, body, startY: 20, styles: { fontSize: 8 }, headStyles: { fillColor: [14, 124, 74] } });
+  doc.save(filename);
+}
+
+
 function AttendanceTable({ c, records, onOpenTeacher, pushToast }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
