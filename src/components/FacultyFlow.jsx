@@ -1099,76 +1099,88 @@ function StatMini({ c, label, value, tone }) {
 
 /* ---------------------------------- HISTORY ----------------------------------- */
 
-const RANGE_OPTIONS = ["Today", "Yesterday", "This Week", "Last Week", "This Month", "Last Month", "This Year", "Academic Year", "Custom Range"];
+function toDateInput(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+function fromDateInput(v) { const [y, m, d] = v.split("-").map(Number); return new Date(y, m - 1, d); }
 
 function HistoryPage({ c, onOpenTeacher, pushToast }) {
-  const [range, setRange] = useState("This Month");
+  const [startDate, setStartDate] = useState(toDateInput(new Date(DEMO_DATE.getFullYear(), DEMO_DATE.getMonth(), 1)));
+  const [endDate, setEndDate] = useState(toDateInput(DEMO_DATE));
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
-  const [page, setPage] = useState(1);
-  const pageSize = 8;
 
-  // Build a combined 30-working-day dataset across all teachers for reporting.
-  const dataset = useMemo(() => {
+  const allRows = useMemo(() => {
     const rows = [];
     TEACHERS.forEach((t) => {
-      const hist = buildHistory(t.id, 26);
-      hist.forEach((h) => rows.push({ ...h, teacher: t.name, dept: t.dept, id: t.id }));
+      buildHistory(t.id, 26).forEach((h) => rows.push({ ...h, teacher: t.name, dept: t.dept, id: t.id }));
+    });
+    const store = loadHistoryStore();
+    Object.entries(store).forEach(([dateKey, recs]) => {
+      const d = new Date(dateKey);
+      if (isNaN(d)) return;
+      recs.forEach((r) => rows.push({ ...r, date: d }));
     });
     return rows;
   }, []);
 
-  const filteredRows = useMemo(() => {
-    return dataset.filter((r) => {
-      const q = query.toLowerCase();
-      const matchesQ = !q || r.teacher.toLowerCase().includes(q) || r.dept.toLowerCase().includes(q);
-      const matchesS = statusFilter === "All" || r.status === statusFilter;
-      return matchesQ && matchesS;
-    });
-  }, [dataset, query, statusFilter]);
+  const rangeRows = useMemo(() => {
+    const s = fromDateInput(startDate);
+    const e = endDate ? fromDateInput(endDate) : fromDateInput(startDate);
+    s.setHours(0, 0, 0, 0); e.setHours(23, 59, 59, 999);
+    return allRows.filter((r) => r.date >= s && r.date <= e);
+  }, [allRows, startDate, endDate]);
+
+  const matchedTeacher = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return null;
+    return TEACHERS.find((t) => t.name.toLowerCase().includes(q)) || null;
+  }, [query]);
+
+  const scopedRows = useMemo(() => (matchedTeacher ? rangeRows.filter((r) => r.id === matchedTeacher.id) : rangeRows), [rangeRows, matchedTeacher]);
+  const tableRows = useMemo(() => [...scopedRows]
+    .filter((r) => statusFilter === "All" || r.status === statusFilter)
+    .sort((a, b) => b.date - a.date), [scopedRows, statusFilter]);
 
   const kpis = useMemo(() => {
-    const working = dataset.filter((r) => r.status !== "Holiday");
+    const working = scopedRows.filter((r) => r.status !== "Holiday");
     const present = working.filter((r) => r.status === "Present").length;
     const late = working.filter((r) => r.status === "Late").length;
     const absent = working.filter((r) => r.status === "Absent").length;
-    const workingDays = new Set(dataset.map((r) => r.date.toDateString())).size;
-    const lateDelays = working.filter((r) => r.status === "Late").map((r) => r.delay);
-    const avgDelay = lateDelays.length ? Math.round(lateDelays.reduce((a, b) => a + b, 0) / lateDelays.length) : 0;
+    const delays = working.filter((r) => r.status === "Late").map((r) => r.delay || 0);
     return {
-      workingDays,
+      workingDays: new Set(working.map((r) => r.date.toDateString())).size,
       presentPct: working.length ? Math.round((present / working.length) * 100) : 0,
       latePct: working.length ? Math.round((late / working.length) * 100) : 0,
       absentPct: working.length ? Math.round((absent / working.length) * 100) : 0,
-      avgArrival: "08:47 AM",
-      avgDelay,
+      lateCount: late,
+      absentCount: absent,
+      avgDelay: delays.length ? Math.round(delays.reduce((a, b) => a + b, 0) / delays.length) : 0,
     };
-  }, [dataset]);
+  }, [scopedRows]);
 
   const dailyTrend = useMemo(() => {
     const byDate = {};
-    dataset.forEach((r) => {
+    [...scopedRows].sort((a, b) => a.date - b.date).forEach((r) => {
       const key = r.date.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
       byDate[key] = byDate[key] || { date: key, present: 0, total: 0 };
       if (r.status !== "Holiday") { byDate[key].total++; if (r.status === "Present" || r.status === "Late") byDate[key].present++; }
     });
-    return Object.values(byDate).slice(-18).map((d) => ({ date: d.date, pct: d.total ? Math.round((d.present / d.total) * 100) : 0 }));
-  }, [dataset]);
+    return Object.values(byDate).map((d) => ({ date: d.date, pct: d.total ? Math.round((d.present / d.total) * 100) : 0 }));
+  }, [scopedRows]);
 
   const deptComparison = useMemo(() => {
     const byDept = {};
-    dataset.forEach((r) => {
+    scopedRows.forEach((r) => {
       if (r.status === "Holiday") return;
       byDept[r.dept] = byDept[r.dept] || { dept: r.dept, present: 0, total: 0 };
       byDept[r.dept].total++;
       if (r.status === "Present" || r.status === "Late") byDept[r.dept].present++;
     });
     return Object.values(byDept).map((d) => ({ dept: d.dept.replace(" (ECE)", ""), pct: Math.round((d.present / d.total) * 100) }));
-  }, [dataset]);
+  }, [scopedRows]);
 
   const teacherRanking = useMemo(() => {
     const byT = {};
-    dataset.forEach((r) => {
+    scopedRows.forEach((r) => {
       if (r.status === "Holiday") return;
       byT[r.id] = byT[r.id] || { name: r.teacher, present: 0, total: 0 };
       byT[r.id].total++;
@@ -1176,186 +1188,194 @@ function HistoryPage({ c, onOpenTeacher, pushToast }) {
     });
     return Object.values(byT).map((t) => ({ name: t.name.replace(/^(Dr\.|Mr\.|Mrs\.|Ms\.)\s/, ""), pct: Math.round((t.present / t.total) * 100) }))
       .sort((a, b) => b.pct - a.pct).slice(0, 8);
-  }, [dataset]);
+  }, [scopedRows]);
 
   const lateTrend = useMemo(() => {
     const byWeek = {};
-    dataset.forEach((r) => {
+    scopedRows.forEach((r) => {
       if (r.status !== "Late") return;
       const wk = `W${Math.ceil(r.date.getDate() / 7)} ${r.date.toLocaleDateString("en-IN", { month: "short" })}`;
       byWeek[wk] = (byWeek[wk] || 0) + 1;
     });
     return Object.entries(byWeek).map(([week, count]) => ({ week, count }));
-  }, [dataset]);
+  }, [scopedRows]);
 
-  const pageRows = filteredRows.slice((page - 1) * pageSize, page * pageSize);
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const rangeLabel = `${fromDateInput(startDate).toLocaleDateString("en-IN")}${endDate && endDate !== startDate ? ` – ${fromDateInput(endDate).toLocaleDateString("en-IN")}` : ""}`;
+  const scopeLabel = matchedTeacher ? matchedTeacher.name : "All teachers";
+  const exportRows = () => tableRows.map((r) => ({
+    Date: r.date.toLocaleDateString("en-IN"),
+    Teacher: r.teacher,
+    Department: r.dept,
+    Deadline: minToLabel(r.deadline),
+    Punch: minToLabel(r.punch),
+    Delay: r.status === "Late" ? `${r.delay} min` : "",
+    Status: r.status,
+  }));
+  const fileBase = `faculty-flow-${matchedTeacher ? matchedTeacher.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase() : "all-teachers"}`;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-5">
-      <aside className="space-y-4">
-        <div className="rounded-2xl p-4" style={{ background: c.surface, border: `1px solid ${c.border}` }}>
-          <div className="text-[11px] font-bold uppercase tracking-wide mb-2.5" style={{ color: c.inkFaint }}>Date range</div>
-          <div className="space-y-1">
-            {RANGE_OPTIONS.map((r) => (
-              <button key={r} onClick={() => setRange(r)}
-                className="w-full text-left px-2.5 py-1.5 rounded-lg text-[12.5px] font-medium transition-colors"
-                style={{ background: range === r ? c.brandSoft : "transparent", color: range === r ? c.brand : c.inkMuted }}>
-                {r}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="rounded-2xl p-4" style={{ background: c.surface, border: `1px solid ${c.border}` }}>
-          <div className="text-[11px] font-bold uppercase tracking-wide mb-2.5" style={{ color: c.inkFaint }}>Quick navigation</div>
-          <div className="grid grid-cols-4 gap-1.5">
-            {["Day", "Week", "Month", "Year"].map((q) => (
-              <button key={q} className="text-[11px] font-semibold py-1.5 rounded-lg" style={{ background: c.surfaceAlt, color: c.inkMuted }}>{q}</button>
-            ))}
-          </div>
-        </div>
-      </aside>
-
-      <div className="space-y-5 min-w-0">
+    <div className="space-y-5">
+      <div className="rounded-2xl p-4 flex flex-col lg:flex-row lg:items-end gap-3" style={{ background: c.surface, border: `1px solid ${c.border}` }}>
         <div>
-          <h2 className="text-[16px] font-bold mb-3" style={{ fontFamily: "'Inter Tight', Inter, sans-serif" }}>{range} · reporting overview</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            <KpiCard c={c} label="Working days" value={kpis.workingDays} />
-            <KpiCard c={c} label="Present %" value={`${kpis.presentPct}%`} tone={STATUS_META.Present.fg} />
-            <KpiCard c={c} label="Late %" value={`${kpis.latePct}%`} tone={STATUS_META.Late.fg} />
-            <KpiCard c={c} label="Absent %" value={`${kpis.absentPct}%`} tone={STATUS_META.Absent.fg} />
-            <KpiCard c={c} label="Avg arrival" value={kpis.avgArrival} />
-            <KpiCard c={c} label="Avg delay" value={`${kpis.avgDelay}m`} />
+          <div className="text-[11px] font-bold uppercase tracking-wide mb-1.5" style={{ color: c.inkFaint }}>From date</div>
+          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
+            className="h-9 px-2.5 rounded-lg text-[12.5px] outline-none" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.ink }} />
+        </div>
+        <div>
+          <div className="text-[11px] font-bold uppercase tracking-wide mb-1.5" style={{ color: c.inkFaint }}>To date (optional)</div>
+          <input type="date" value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)}
+            className="h-9 px-2.5 rounded-lg text-[12.5px] outline-none" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.ink }} />
+        </div>
+        <div className="flex-1 min-w-[200px]">
+          <div className="text-[11px] font-bold uppercase tracking-wide mb-1.5" style={{ color: c.inkFaint }}>Search teacher</div>
+          <div className="relative">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: c.inkFaint }} />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Type a teacher's name…"
+              className="w-full pl-8 pr-3 h-9 rounded-lg text-[12.5px] outline-none" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.ink }} />
           </div>
         </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <ChartCard c={c} title="Daily attendance trend">
-            <ResponsiveContainer width="100%" height={200}>
-              <AreaChart data={dailyTrend}>
-                <defs><linearGradient id="gArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={c.brand} stopOpacity={0.35} /><stop offset="100%" stopColor={c.brand} stopOpacity={0} /></linearGradient></defs>
-                <CartesianGrid strokeDasharray="3 3" stroke={c.border} vertical={false} />
-                <XAxis dataKey="date" tick={{ fontSize: 9, fill: c.inkFaint }} axisLine={false} tickLine={false} interval={2} />
-                <YAxis tick={{ fontSize: 9, fill: c.inkFaint }} axisLine={false} tickLine={false} width={28} />
-                <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} />
-                <Area type="monotone" dataKey="pct" stroke={c.brand} strokeWidth={2} fill="url(#gArea)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </ChartCard>
-
-          <ChartCard c={c} title="Department comparison">
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={deptComparison} layout="vertical" margin={{ left: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={c.border} horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 9, fill: c.inkFaint }} axisLine={false} tickLine={false} domain={[0, 100]} />
-                <YAxis type="category" dataKey="dept" tick={{ fontSize: 9.5, fill: c.inkMuted }} axisLine={false} tickLine={false} width={90} />
-                <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} />
-                <Bar dataKey="pct" fill={c.brand} radius={[0, 6, 6, 0]} barSize={12} />
-              </BarChart>
-            </ResponsiveContainer>
-          </ChartCard>
-
-          <ChartCard c={c} title="Late arrivals trend">
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={lateTrend}>
-                <CartesianGrid strokeDasharray="3 3" stroke={c.border} vertical={false} />
-                <XAxis dataKey="week" tick={{ fontSize: 9, fill: c.inkFaint }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 9, fill: c.inkFaint }} axisLine={false} tickLine={false} width={24} />
-                <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} />
-                <Line type="monotone" dataKey="count" stroke={STATUS_META.Late.fg} strokeWidth={2} dot={{ r: 3 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </ChartCard>
-
-          <ChartCard c={c} title="Teacher ranking · attendance %">
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={teacherRanking} layout="vertical" margin={{ left: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={c.border} horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 9, fill: c.inkFaint }} axisLine={false} tickLine={false} domain={[0, 100]} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 9, fill: c.inkMuted }} axisLine={false} tickLine={false} width={90} />
-                <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} />
-                <Bar dataKey="pct" radius={[0, 6, 6, 0]} barSize={11}>
-                  {teacherRanking.map((_, i) => <Cell key={i} fill={i < 3 ? c.brand : c.borderStrong} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </ChartCard>
+        <div className="flex gap-2">
+          <button onClick={async () => { await exportXLSX(exportRows(), `${fileBase}.xlsx`, "History"); pushToast("Excel exported", `${scopeLabel} · ${rangeLabel}`, "success"); }}
+            className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: c.brand, color: "#fff" }}>
+            <FileSpreadsheet size={13} /> Excel
+          </button>
+          <button onClick={async () => { await exportPDF(exportRows(), `${fileBase}.pdf`, `${scopeLabel} · ${rangeLabel}`); pushToast("PDF exported", `${scopeLabel} · ${rangeLabel}`, "success"); }}
+            className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.inkMuted }}>
+            <Download size={13} /> PDF
+          </button>
         </div>
+      </div>
 
-        <ChartCard c={c} title="Attendance heatmap · last 26 working days">
-          <Heatmap c={c} dataset={dataset} />
+      {query.trim() && !matchedTeacher && (
+        <div className="rounded-2xl p-4 text-[12.5px]" style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.inkFaint }}>
+          No teacher matches "{query}". Showing no records.
+        </div>
+      )}
+
+      {matchedTeacher && (
+        <div className="rounded-2xl p-5" style={{ background: c.surface, border: `1px solid ${c.border}` }}>
+          <h3 className="text-[15px] font-bold" style={{ fontFamily: "'Inter Tight', Inter, sans-serif" }}>{matchedTeacher.name}</h3>
+          <p className="text-[12.5px] mt-1" style={{ color: c.inkMuted }}>
+            {matchedTeacher.dept} · {rangeLabel} — <strong style={{ color: STATUS_META.Absent.fg }}>Total Days Absent: {kpis.absentCount}</strong> · <strong style={{ color: STATUS_META.Late.fg }}>Total Times Late: {kpis.lateCount}</strong>
+          </p>
+        </div>
+      )}
+
+      <div>
+        <h2 className="text-[16px] font-bold mb-3" style={{ fontFamily: "'Inter Tight', Inter, sans-serif" }}>{scopeLabel} · {rangeLabel}</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <KpiCard c={c} label="Working days" value={kpis.workingDays} />
+          <KpiCard c={c} label="Present %" value={`${kpis.presentPct}%`} tone={STATUS_META.Present.fg} />
+          <KpiCard c={c} label="Late %" value={`${kpis.latePct}%`} tone={STATUS_META.Late.fg} />
+          <KpiCard c={c} label="Absent %" value={`${kpis.absentPct}%`} tone={STATUS_META.Absent.fg} />
+          <KpiCard c={c} label="Times late" value={kpis.lateCount} tone={STATUS_META.Late.fg} />
+          <KpiCard c={c} label="Avg delay" value={`${kpis.avgDelay}m`} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <ChartCard c={c} title="Daily attendance trend">
+          <ResponsiveContainer width="100%" height={200}>
+            <AreaChart data={dailyTrend}>
+              <defs><linearGradient id="gArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={c.brand} stopOpacity={0.35} /><stop offset="100%" stopColor={c.brand} stopOpacity={0} /></linearGradient></defs>
+              <CartesianGrid strokeDasharray="3 3" stroke={c.border} vertical={false} />
+              <XAxis dataKey="date" tick={{ fontSize: 9, fill: c.inkFaint }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+              <YAxis tick={{ fontSize: 9, fill: c.inkFaint }} axisLine={false} tickLine={false} width={28} />
+              <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+              <Area type="monotone" dataKey="pct" stroke={c.brand} strokeWidth={2} fill="url(#gArea)" />
+            </AreaChart>
+          </ResponsiveContainer>
         </ChartCard>
 
-        <div className="rounded-2xl overflow-hidden" style={{ background: c.surface, border: `1px solid ${c.border}` }}>
-          <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3" style={{ borderBottom: `1px solid ${c.border}` }}>
-            <h3 className="text-[14px] font-bold" style={{ fontFamily: "'Inter Tight', Inter, sans-serif" }}>History records</h3>
-            <div className="sm:ml-auto flex flex-wrap items-center gap-2">
-              <div className="relative">
-                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: c.inkFaint }} />
-                <input value={query} onChange={(e) => { setQuery(e.target.value); }} placeholder="Search teacher or department…"
-                  className="pl-8 pr-3 h-9 rounded-lg text-[12.5px] outline-none w-52" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.ink }} />
-              </div>
-              <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); }}
-                className="h-9 rounded-lg text-[12.5px] px-2.5 outline-none" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.ink }}>
-                {["All", "Present", "Late", "Absent", "Leave", "Holiday"].map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
-              {["Excel", "CSV", "PDF"].map((fmt) => (
-                <button key={fmt} onClick={() => {
-                  if (fmt === "CSV") {
-                    exportCSV(filteredRows.map((r) => ({ Date: r.date.toLocaleDateString("en-IN"), Teacher: r.teacher, Department: r.dept, Status: r.status, Delay: r.delay ?? "" })), `faculty-flow-history.csv`);
-                  }
-                  pushToast("Export completed", `${range} report prepared as ${fmt}${fmt !== "CSV" ? " (downloads as CSV in this preview)" : ""}.`, "success");
-                  if (fmt !== "CSV") exportCSV(filteredRows.map((r) => ({ Date: r.date.toLocaleDateString("en-IN"), Teacher: r.teacher, Department: r.dept, Status: r.status, Delay: r.delay ?? "" })), `faculty-flow-history.csv`);
-                }}
-                  className="h-9 px-3 rounded-lg text-[12px] font-semibold" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.inkMuted }}>
-                  {fmt}
-                </button>
-              ))}
-            </div>
-          </div>
+        <ChartCard c={c} title="Department comparison">
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={deptComparison} layout="vertical" margin={{ left: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={c.border} horizontal={false} />
+              <XAxis type="number" tick={{ fontSize: 9, fill: c.inkFaint }} axisLine={false} tickLine={false} domain={[0, 100]} />
+              <YAxis type="category" dataKey="dept" tick={{ fontSize: 9.5, fill: c.inkMuted }} axisLine={false} tickLine={false} width={90} />
+              <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+              <Bar dataKey="pct" fill={c.brand} radius={[0, 6, 6, 0]} barSize={12} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-[12.5px]">
-              <thead>
-                <tr style={{ background: c.surfaceAlt }}>
-                  <Th c={c} label="Date" />
-                  <Th c={c} label="Teacher" />
-                  <Th c={c} label="Department" />
-                  <Th c={c} label="Reporting Deadline" />
-                  <Th c={c} label="Punch Time" />
-                  <Th c={c} label="Delay" />
-                  <Th c={c} label="Status" />
-                </tr>
-              </thead>
-              <tbody>
-                {pageRows.map((r, i) => (
-                  <tr key={i} onClick={() => onOpenTeacher(r.id)} className="cursor-pointer" style={{ borderTop: `1px solid ${c.border}` }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = c.surfaceAlt} onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
-                    <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkMuted }}>{r.date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</td>
-                    <td className="px-4 py-3 whitespace-nowrap font-semibold">{r.teacher}</td>
-                    <td className="px-4 py-3 whitespace-nowrap" style={{ color: c.inkMuted }}>{r.dept}</td>
-                    <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkMuted }}>{minToLabel(toMin(TIMETABLE[r.id]?.[["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][r.date.getDay()]]) - REPORTING_BUFFER)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkMuted }}>{r.status === "Present" || r.status === "Late" ? "punched" : "—"}</td>
-                    <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkFaint }}>{r.status === "Late" ? `+${r.delay}m` : "—"}</td>
-                    <td className="px-4 py-3 whitespace-nowrap"><Badge status={r.status} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <ChartCard c={c} title="Late arrivals trend">
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={lateTrend}>
+              <CartesianGrid strokeDasharray="3 3" stroke={c.border} vertical={false} />
+              <XAxis dataKey="week" tick={{ fontSize: 9, fill: c.inkFaint }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 9, fill: c.inkFaint }} axisLine={false} tickLine={false} width={24} />
+              <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+              <Line type="monotone" dataKey="count" stroke={STATUS_META.Late.fg} strokeWidth={2} dot={{ r: 3 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </ChartCard>
 
-          <div className="flex items-center justify-between px-4 sm:px-5 py-3" style={{ borderTop: `1px solid ${c.border}` }}>
-            <span className="text-[11.5px]" style={{ color: c.inkFaint }}>Page {page} of {totalPages} · {filteredRows.length} records</span>
-            <div className="flex items-center gap-1.5">
-              <button disabled={page === 1} onClick={() => setPage((p) => p - 1)} className="h-8 w-8 inline-flex items-center justify-center rounded-lg disabled:opacity-40" style={{ border: `1px solid ${c.border}`, color: c.inkMuted }}><ChevronLeft size={14} /></button>
-              <button disabled={page === totalPages} onClick={() => setPage((p) => p + 1)} className="h-8 w-8 inline-flex items-center justify-center rounded-lg disabled:opacity-40" style={{ border: `1px solid ${c.border}`, color: c.inkMuted }}><ChevronRight size={14} /></button>
-            </div>
+        <ChartCard c={c} title="Teacher ranking · attendance %">
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={teacherRanking} layout="vertical" margin={{ left: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={c.border} horizontal={false} />
+              <XAxis type="number" tick={{ fontSize: 9, fill: c.inkFaint }} axisLine={false} tickLine={false} domain={[0, 100]} />
+              <YAxis type="category" dataKey="name" tick={{ fontSize: 9, fill: c.inkMuted }} axisLine={false} tickLine={false} width={90} />
+              <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+              <Bar dataKey="pct" radius={[0, 6, 6, 0]} barSize={11}>
+                {teacherRanking.map((_, i) => <Cell key={i} fill={i < 3 ? c.brand : c.borderStrong} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+      </div>
+
+      <div className="rounded-2xl overflow-hidden" style={{ background: c.surface, border: `1px solid ${c.border}` }}>
+        <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3" style={{ borderBottom: `1px solid ${c.border}` }}>
+          <h3 className="text-[14px] font-bold" style={{ fontFamily: "'Inter Tight', Inter, sans-serif" }}>History records</h3>
+          <div className="sm:ml-auto flex flex-wrap items-center gap-2">
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
+              className="h-9 rounded-lg text-[12.5px] px-2.5 outline-none" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.ink }}>
+              {["All", "Present", "Late", "Absent", "Leave", "Holiday"].map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
           </div>
         </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-[12.5px]">
+            <thead>
+              <tr style={{ background: c.surfaceAlt }}>
+                <Th c={c} label="Date" />
+                <Th c={c} label="Teacher" />
+                <Th c={c} label="Department" />
+                <Th c={c} label="Reporting Deadline" />
+                <Th c={c} label="Punch Time" />
+                <Th c={c} label="Delay" />
+                <Th c={c} label="Status" />
+              </tr>
+            </thead>
+            <tbody>
+              {tableRows.map((r, i) => (
+                <tr key={i} onClick={() => onOpenTeacher(r.id)} className="cursor-pointer" style={{ borderTop: `1px solid ${c.border}` }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = c.surfaceAlt} onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
+                  <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkMuted }}>{r.date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</td>
+                  <td className="px-4 py-3 whitespace-nowrap font-semibold">{r.teacher}</td>
+                  <td className="px-4 py-3 whitespace-nowrap" style={{ color: c.inkMuted }}>{r.dept}</td>
+                  <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkMuted }}>{minToLabel(r.deadline)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkMuted }}>{minToLabel(r.punch)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkFaint }}>{r.status === "Late" ? `+${r.delay}m` : "—"}</td>
+                  <td className="px-4 py-3 whitespace-nowrap"><Badge status={r.status} /></td>
+                </tr>
+              ))}
+              {tableRows.length === 0 && (
+                <tr><td colSpan={7} className="text-center py-12" style={{ color: c.inkFaint }}>No records for this selection.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="px-4 sm:px-5 py-3 text-[11.5px]" style={{ borderTop: `1px solid ${c.border}`, color: c.inkFaint }}>{tableRows.length} records</div>
       </div>
     </div>
   );
 }
+
 
 function KpiCard({ c, label, value, tone }) {
   return (
