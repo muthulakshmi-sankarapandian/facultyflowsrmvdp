@@ -1288,10 +1288,13 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
     const recs = buildRecords(tt, map, d, 24 * 60);
     if (!recs.length) { pushToast("No matching records", "None of the punches matched the active timetable for that weekday.", "error"); return false; }
     mergeHistoryDay(dateStr, recs);
+    setStartDate((p) => (dateStr < p ? dateStr : p));
+    setEndDate((p) => (!p || dateStr > p ? dateStr : p));
     onRefresh?.();
     pushToast("Past sheet saved", `${recs.length} records for ${d.toLocaleDateString("en-IN")} added to History from ${fileName}.`, "success");
     return true;
   }, [tt, pushToast, onRefresh]);
+
 
   const handlePastUpload = useCallback(async (e) => {
     const f = e.target.files?.[0];
