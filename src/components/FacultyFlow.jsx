@@ -832,15 +832,13 @@ async function exportPDF(rows, filename, title) {
 }
 
 
-function AttendanceTable({ c, records, onOpenTeacher, pushToast }) {
+function AttendanceTable({ c, records, onOpenTeacher, pushToast, clearPunchSheet }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [sortKey, setSortKey] = useState("firstClass");
   const [sortDir, setSortDir] = useState("asc");
-  const [page, setPage] = useState(1);
   const [visibleCols, setVisibleCols] = useState(TABLE_COLS.map((x) => x.key));
   const [colMenuOpen, setColMenuOpen] = useState(false);
-  const pageSize = 8;
 
   const filtered = useMemo(() => {
     let rows = records.filter((r) => {
@@ -857,9 +855,6 @@ function AttendanceTable({ c, records, onOpenTeacher, pushToast }) {
     });
     return rows;
   }, [records, query, statusFilter, sortKey, sortDir]);
-
-  const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
 
   const toggleSort = (key) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -878,12 +873,12 @@ function AttendanceTable({ c, records, onOpenTeacher, pushToast }) {
         <div className="sm:ml-auto flex flex-wrap items-center gap-2">
           <div className="relative">
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: c.inkFaint }} />
-            <input value={query} onChange={(e) => { setQuery(e.target.value); setPage(1); }}
+            <input value={query} onChange={(e) => { setQuery(e.target.value); }}
               placeholder="Search teacher, department, subject…"
               className="pl-8 pr-3 h-9 rounded-lg text-[12.5px] outline-none w-56"
               style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.ink }} />
           </div>
-          <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+          <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); }}
             className="h-9 rounded-lg text-[12.5px] px-2.5 outline-none" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.ink }}>
             {["All", "Present", "Late", "Absent", "Waiting", "Leave", "Holiday"].map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
@@ -929,7 +924,7 @@ function AttendanceTable({ c, records, onOpenTeacher, pushToast }) {
             </tr>
           </thead>
           <tbody>
-            {pageRows.map((r) => (
+            {filtered.map((r) => (
               <tr key={r.id} onClick={() => onOpenTeacher(r.id)} className="cursor-pointer transition-colors"
                 style={{ borderTop: `1px solid ${c.border}` }}
                 onMouseEnter={(e) => e.currentTarget.style.background = c.surfaceAlt}
@@ -944,8 +939,8 @@ function AttendanceTable({ c, records, onOpenTeacher, pushToast }) {
                 {col("status") && <td className="px-4 py-3 whitespace-nowrap"><Badge status={r.status} /></td>}
               </tr>
             ))}
-            {pageRows.length === 0 && (
-              <tr><td colSpan={8} className="text-center py-12" style={{ color: c.inkFaint }}>No teachers match your search.</td></tr>
+            {filtered.length === 0 && (
+              <tr><td colSpan={8} className="text-center py-12" style={{ color: c.inkFaint }}>{records.length === 0 ? "No punch data. Upload today's punch sheet to begin." : "No teachers match your search."}</td></tr>
             )}
           </tbody>
         </table>
@@ -1296,10 +1291,10 @@ function HistoryPage({ c, onOpenTeacher, pushToast }) {
             <div className="sm:ml-auto flex flex-wrap items-center gap-2">
               <div className="relative">
                 <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: c.inkFaint }} />
-                <input value={query} onChange={(e) => { setQuery(e.target.value); setPage(1); }} placeholder="Search teacher or department…"
+                <input value={query} onChange={(e) => { setQuery(e.target.value); }} placeholder="Search teacher or department…"
                   className="pl-8 pr-3 h-9 rounded-lg text-[12.5px] outline-none w-52" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.ink }} />
               </div>
-              <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+              <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); }}
                 className="h-9 rounded-lg text-[12.5px] px-2.5 outline-none" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.ink }}>
                 {["All", "Present", "Late", "Absent", "Leave", "Holiday"].map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
