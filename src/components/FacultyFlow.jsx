@@ -1349,17 +1349,72 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
               className="w-full pl-8 pr-3 h-9 rounded-lg text-[12.5px] outline-none" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.ink }} />
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button onClick={async () => { await exportXLSX(exportRows(), `${fileBase}.xlsx`, "History"); pushToast("Excel exported", `${scopeLabel} · ${rangeLabel}`, "success"); }}
             className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: c.brand, color: "#fff" }}>
             <FileSpreadsheet size={13} /> Excel
           </button>
-          <button onClick={async () => { await exportPDF(exportRows(), `${fileBase}.pdf`, `${scopeLabel} · ${rangeLabel}`); pushToast("PDF exported", `${scopeLabel} · ${rangeLabel}`, "success"); }}
+          <button onClick={async () => { await exportPDF(exportRows(), `${fileBase}.pdf`, `${scopeLabel} · ${rangeLabel}`, "success") }}
             className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.inkMuted }}>
             <Download size={13} /> PDF
           </button>
+          <input ref={pastInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handlePastUpload} />
+          <button onClick={() => pastInputRef.current?.click()}
+            className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.inkMuted }}>
+            <CalendarPlus size={13} /> Upload past sheet
+          </button>
+          <button onClick={() => setConfirmFlush(true)}
+            className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: STATUS_META.Absent.bg, border: `1px solid ${STATUS_META.Absent.fg}44`, color: STATUS_META.Absent.fg }}>
+            <Trash2 size={13} /> Flush all history
+          </button>
         </div>
       </div>
+
+      {pendingPast && (
+        <div className="rounded-2xl p-4 flex flex-col sm:flex-row sm:items-end gap-3" style={{ background: c.surface, border: `1px solid ${c.brand}55` }}>
+          <div className="flex-1">
+            <div className="text-[13px] font-bold">No date found in "{pendingPast.name}"</div>
+            <div className="text-[12px] mt-0.5" style={{ color: c.inkMuted }}>Pick the date this punch sheet belongs to. {Object.keys(pendingPast.map).length} punches matched the active timetable.</div>
+          </div>
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-wide mb-1.5" style={{ color: c.inkFaint }}>Sheet date</div>
+            <input type="date" value={pendingDate} max={toDateInput(new Date())} onChange={(e) => setPendingDate(e.target.value)}
+              className="h-9 px-2.5 rounded-lg text-[12.5px] outline-none" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.ink }} />
+          </div>
+          <div className="flex gap-2">
+            <button onClick={confirmPendingDate} disabled={!pendingDate}
+              className="h-9 px-3 rounded-lg text-[12.5px] font-semibold disabled:opacity-50" style={{ background: c.brand, color: "#fff" }}>Save to history</button>
+            <button onClick={() => setPendingPast(null)}
+              className="h-9 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.inkMuted }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      <AnimatePresence>
+        {confirmFlush && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.45)" }}
+            onClick={() => setConfirmFlush(false)}>
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+              className="rounded-2xl p-5 max-w-sm w-full" style={{ background: c.surface, border: `1px solid ${c.border}` }}
+              onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-2.5 mb-2">
+                <span className="h-9 w-9 rounded-xl inline-flex items-center justify-center" style={{ background: STATUS_META.Absent.bg, color: STATUS_META.Absent.fg }}><Trash2 size={16} /></span>
+                <h3 className="text-[15px] font-bold">Delete all history?</h3>
+              </div>
+              <p className="text-[12.5px] leading-relaxed" style={{ color: c.inkMuted }}>
+                Are you sure you want to permanently delete all historical attendance records? This action cannot be undone. Today's active view will not be affected.
+              </p>
+              <div className="flex justify-end gap-2 mt-4">
+                <button onClick={() => setConfirmFlush(false)}
+                  className="h-9 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.inkMuted }}>Cancel</button>
+                <button onClick={flushHistory}
+                  className="h-9 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: STATUS_META.Absent.fg, color: "#fff" }}>Delete permanently</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {query.trim() && !matchedTeacher && (
         <div className="rounded-2xl p-4 text-[12.5px]" style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.inkFaint }}>
