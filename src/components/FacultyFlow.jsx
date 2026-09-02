@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   LayoutDashboard, History as HistoryIcon, Settings as SettingsIcon,
   Search, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, ChevronsUpDown,
@@ -6,7 +6,7 @@ import {
   Sun, Moon, Monitor, Download, X, Menu, ArrowUpDown, Calendar as CalendarIcon,
   TrendingUp, Users, FileSpreadsheet, Bell, ChevronRight as ChevronRightIcon,
   FolderSync, PlugZap, Coffee, PauseCircle, SlidersHorizontal, Columns3,
-  ArrowRight, Building2, BookOpen, Timer, PieChart as PieChartIcon
+  ArrowRight, Building2, BookOpen, Timer, PieChart as PieChartIcon, Trash2, CalendarPlus
 } from "lucide-react";
 import {
   ResponsiveContainer, LineChart, Line, AreaChart, Area, BarChart, Bar,
