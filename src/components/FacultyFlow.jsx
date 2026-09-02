@@ -1102,25 +1102,14 @@ function StatMini({ c, label, value, tone }) {
 function toDateInput(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
 function fromDateInput(v) { const [y, m, d] = v.split("-").map(Number); return new Date(y, m - 1, d); }
 
-function HistoryPage({ c, onOpenTeacher, pushToast }) {
-  const [startDate, setStartDate] = useState(toDateInput(new Date(DEMO_DATE.getFullYear(), DEMO_DATE.getMonth(), 1)));
-  const [endDate, setEndDate] = useState(toDateInput(DEMO_DATE));
+function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey }) {
+  const today = new Date();
+  const [startDate, setStartDate] = useState(toDateInput(new Date(today.getFullYear(), today.getMonth(), 1)));
+  const [endDate, setEndDate] = useState(toDateInput(today));
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
 
-  const allRows = useMemo(() => {
-    const rows = [];
-    TEACHERS.forEach((t) => {
-      buildHistory(t.id, 26).forEach((h) => rows.push({ ...h, teacher: t.name, dept: t.dept, id: t.id }));
-    });
-    const store = loadHistoryStore();
-    Object.entries(store).forEach(([dateKey, recs]) => {
-      const d = new Date(dateKey);
-      if (isNaN(d)) return;
-      recs.forEach((r) => rows.push({ ...r, date: d }));
-    });
-    return rows;
-  }, []);
+  const allRows = useMemo(() => historyRows(), [refreshKey]);
 
   const rangeRows = useMemo(() => {
     const s = fromDateInput(startDate);
@@ -1132,8 +1121,10 @@ function HistoryPage({ c, onOpenTeacher, pushToast }) {
   const matchedTeacher = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return null;
-    return TEACHERS.find((t) => t.name.toLowerCase().includes(q)) || null;
-  }, [query]);
+    const pool = teachers.length ? teachers : allRows.map((r) => ({ id: r.id, name: r.teacher, dept: r.dept }));
+    return pool.find((t) => t.name.toLowerCase().includes(q)) || null;
+  }, [query, teachers, allRows]);
+
 
   const scopedRows = useMemo(() => (matchedTeacher ? rangeRows.filter((r) => r.id === matchedTeacher.id) : rangeRows), [rangeRows, matchedTeacher]);
   const tableRows = useMemo(() => [...scopedRows]
