@@ -281,7 +281,9 @@ export default function FacultyFlowApp() {
   const [lastSync, setLastSync] = useState(new Date(Date.now() - 60000));
   const [toasts, setToasts] = useState([]);
   const [drawerTeacher, setDrawerTeacher] = useState(null);
-  const [bufferMin, setBufferMin] = useState(REPORTING_BUFFER);
+  const [syncCount, setSyncCount] = useState(0);
+  const [watchConnected, setWatchConnected] = useState(true);
+  const [sources, setSources] = useState({ timetable: "timetable-aug-2026.xlsx", punch: "punch-31-08-2026.xlsx" });
 
   const pushToast = useCallback((title, desc, kind = "success") => {
     const id = Math.random().toString(36).slice(2);
@@ -294,15 +296,29 @@ export default function FacultyFlowApp() {
     return () => clearInterval(iv);
   }, []);
 
-  useEffect(() => {
-    const iv = setInterval(() => {
+  const syncNow = useCallback((manual) => {
+    setSyncCount((n) => {
+      const next = Math.min(n + 1, PENDING_PUNCHES.length);
       setLastSync(new Date());
-      pushToast("Attendance updated", "New punch records synced from the biometric machine.", "sync");
-    }, 45000);
-    return () => clearInterval(iv);
+      if (next > n) pushToast("New punch record imported", `${PENDING_PUNCHES[next - 1].id.toUpperCase()} punched at ${PENDING_PUNCHES[next - 1].time}.`, "sync");
+      else if (manual) pushToast("Already up to date", "No new punch records found in the watched folder.", "info");
+      return next;
+    });
   }, [pushToast]);
 
-  const todayRecords = useMemo(() => buildTodayRecords(), []);
+  useEffect(() => {
+    const iv = setInterval(() => { if (watchConnected) syncNow(false); }, 20000);
+    return () => clearInterval(iv);
+  }, [syncNow, watchConnected]);
+
+  useEffect(() => {
+    if (watchConnected) return;
+    const t = setTimeout(() => { setWatchConnected(true); pushToast("Watch folder reconnected", "Connection restored automatically.", "success"); }, 4000);
+    return () => clearTimeout(t);
+  }, [watchConnected, pushToast]);
+
+  const todayRecords = useMemo(() => buildTodayRecords(syncCount), [syncCount]);
+
 
   const summary = useMemo(() => {
     const scheduled = todayRecords.filter((r) => r.status !== "Holiday").length;
