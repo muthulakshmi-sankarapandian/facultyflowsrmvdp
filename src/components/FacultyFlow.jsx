@@ -946,12 +946,8 @@ function AttendanceTable({ c, records, onOpenTeacher, pushToast, clearPunchSheet
         </table>
       </div>
 
-      <div className="flex items-center justify-between px-4 sm:px-5 py-3" style={{ borderTop: `1px solid ${c.border}` }}>
-        <span className="text-[11.5px]" style={{ color: c.inkFaint }}>Page {page} of {totalPages}</span>
-        <div className="flex items-center gap-1.5">
-          <button disabled={page === 1} onClick={() => setPage((p) => p - 1)} className="h-8 w-8 inline-flex items-center justify-center rounded-lg disabled:opacity-40" style={{ border: `1px solid ${c.border}`, color: c.inkMuted }}><ChevronLeft size={14} /></button>
-          <button disabled={page === totalPages} onClick={() => setPage((p) => p + 1)} className="h-8 w-8 inline-flex items-center justify-center rounded-lg disabled:opacity-40" style={{ border: `1px solid ${c.border}`, color: c.inkMuted }}><ChevronRight size={14} /></button>
-        </div>
+      <div className="px-4 sm:px-5 py-3 text-[11.5px]" style={{ borderTop: `1px solid ${c.border}`, color: c.inkFaint }}>
+        Showing all {filtered.length} records
       </div>
     </div>
   );
