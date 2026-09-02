@@ -1395,53 +1395,10 @@ function ChartCard({ c, title, children }) {
   );
 }
 
-function Heatmap({ c, dataset }) {
-  const dates = [...new Set(dataset.map((r) => r.date.toDateString()))].sort((a, b) => new Date(a) - new Date(b));
-  const cellColor = (pct) => {
-    if (pct == null) return c.surfaceAlt;
-    if (pct >= 95) return c.brand;
-    if (pct >= 85) return "#5BC98A";
-    if (pct >= 70) return "#F0B94F";
-    return STATUS_META.Absent.dot;
-  };
-  const perDept = {};
-  dataset.forEach((r) => {
-    perDept[r.dept] = perDept[r.dept] || {};
-    const key = r.date.toDateString();
-    perDept[r.dept][key] = perDept[r.dept][key] || { present: 0, total: 0 };
-    if (r.status !== "Holiday") { perDept[r.dept][key].total++; if (r.status === "Present" || r.status === "Late") perDept[r.dept][key].present++; }
-  });
-
-  return (
-    <div className="overflow-x-auto">
-      <div className="inline-block min-w-full">
-        <div className="grid" style={{ gridTemplateColumns: `120px repeat(${dates.length}, 14px)`, gap: "3px" }}>
-          <div />
-          {dates.map((d) => <div key={d} className="h-3" />)}
-          {DEPARTMENTS.map((dept) => (
-            <React.Fragment key={dept}>
-              <div className="text-[10px] pr-2 flex items-center justify-end truncate" style={{ color: c.inkFaint }}>{dept.replace(" (ECE)", "")}</div>
-              {dates.map((d) => {
-                const cell = perDept[dept]?.[d];
-                const pct = cell && cell.total ? Math.round((cell.present / cell.total) * 100) : null;
-                return <div key={d} title={`${dept} · ${new Date(d).toLocaleDateString("en-IN")} · ${pct ?? "—"}%`} className="h-3.5 w-3.5 rounded-[3px]" style={{ background: cellColor(pct) }} />;
-              })}
-            </React.Fragment>
-          ))}
-        </div>
-        <div className="flex items-center gap-2 mt-3 text-[10px]" style={{ color: c.inkFaint }}>
-          <span>Low</span>
-          {[STATUS_META.Absent.dot, "#F0B94F", "#5BC98A", c.brand].map((col, i) => <div key={i} className="h-3 w-3 rounded-[3px]" style={{ background: col }} />)}
-          <span>High</span>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /* --------------------------------- SETTINGS ------------------------------------ */
 
-function SettingsPage({ c, themeMode, setThemeMode, bufferMin, setBufferMin, pushToast }) {
+function SettingsPage({ c, themeMode, setThemeMode, pushToast }) {
   const [workingDays, setWorkingDays] = useState({ Mon: true, Tue: true, Wed: true, Thu: true, Fri: true, Sat: false, Sun: false });
   const [holidays, setHolidays] = useState([
     { date: "15 Aug 2026", name: "Independence Day" },
@@ -1463,16 +1420,6 @@ function SettingsPage({ c, themeMode, setThemeMode, bufferMin, setBufferMin, pus
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 max-w-5xl">
-      <Section title="Reporting buffer" icon={Timer} desc="Teachers can punch in up to this many minutes before class and still be marked on time.">
-        <div className="flex items-center gap-3">
-          <input type="range" min="0" max="20" value={bufferMin} onChange={(e) => setBufferMin(Number(e.target.value))}
-            className="flex-1 accent-current" style={{ accentColor: c.brand }} />
-          <span className="text-[13px] font-bold ff-mono w-16 text-right" style={{ color: c.brand }}>{bufferMin} min</span>
-        </div>
-        <button onClick={() => pushToast("Settings saved", `Reporting buffer set to ${bufferMin} minutes.`, "success")}
-          className="mt-4 text-[12px] font-semibold px-3 py-1.5 rounded-lg" style={{ background: c.brandSoft, color: c.brand }}>Save</button>
-      </Section>
-
       <Section title="Working days" icon={CalendarIcon} desc="Days the institution holds classes.">
         <div className="flex flex-wrap gap-2">
           {Object.keys(workingDays).map((d) => (
