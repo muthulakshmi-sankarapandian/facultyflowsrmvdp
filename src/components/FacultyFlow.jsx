@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   LayoutDashboard, History as HistoryIcon, Settings as SettingsIcon,
   Search, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, ChevronsUpDown,
@@ -6,7 +6,7 @@ import {
   Sun, Moon, Monitor, Download, X, Menu, ArrowUpDown, Calendar as CalendarIcon,
   TrendingUp, Users, FileSpreadsheet, Bell, ChevronRight as ChevronRightIcon,
   FolderSync, PlugZap, Coffee, PauseCircle, SlidersHorizontal, Columns3,
-  ArrowRight, Building2, BookOpen, Timer, PieChart as PieChartIcon
+  ArrowRight, Building2, BookOpen, Timer, PieChart as PieChartIcon, Trash2, CalendarPlus
 } from "lucide-react";
 import {
   ResponsiveContainer, LineChart, Line, AreaChart, Area, BarChart, Bar,
@@ -201,6 +201,66 @@ async function parsePunchFile(file, teachers) {
     if (map[t.id] == null || min < map[t.id]) map[t.id] = min;
   });
   return map;
+}
+
+function findSheetDate(grid, filename) {
+  for (const row of grid) {
+    for (const v of row || []) {
+      if (v instanceof Date && !isNaN(v)) return v;
+      const m = String(v ?? "").match(/(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{2,4})/);
+      if (m) {
+        let y = Number(m[3]); if (y < 100) y += 2000;
+        const d = new Date(y, Number(m[2]) - 1, Number(m[1]));
+        if (!isNaN(d) && d.getFullYear() > 2000) return d;
+      }
+    }
+  }
+  const fm = String(filename || "").match(/(\d{1,2})[.\-_ ](\d{1,2})[.\-_ ](\d{2,4})/);
+  if (fm) {
+    let y = Number(fm[3]); if (y < 100) y += 2000;
+    const d = new Date(y, Number(fm[2]) - 1, Number(fm[1]));
+    if (!isNaN(d)) return d;
+  }
+  return null;
+}
+
+async function parsePastPunchFile(file, teachers) {
+  const XLSX = await import("xlsx");
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: "array", cellDates: true });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const grid = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+  const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
+  const map = {};
+  rows.forEach((row) => {
+    const entries = Object.entries(row);
+    const nameEntry = entries.find(([k]) => /name|teacher|staff|faculty|employee/i.test(k));
+    const timeEntry = entries.find(([k]) => /time|punch|in\b/i.test(k));
+    if (!nameEntry || !timeEntry) return;
+    const nm = normName(nameEntry[1]);
+    const raw = timeEntry[1];
+    const match = raw instanceof Date ? [null, String(raw.getHours()), String(raw.getMinutes()).padStart(2, "0")] : String(raw).match(/(\d{1,2}):(\d{2})/);
+    if (!nm || !match) return;
+    const t = teachers.find((x) => {
+      const a = normName(x.name);
+      return a === nm || (a.length > 4 && nm.includes(a)) || (nm.length > 4 && a.includes(nm));
+    });
+    if (!t) return;
+    const min = Number(match[1]) * 60 + Number(match[2]);
+    if (map[t.id] == null || min < map[t.id]) map[t.id] = min;
+  });
+  return { map, date: findSheetDate(grid, file.name) };
+}
+
+function mergeHistoryDay(key, records) {
+  if (!records.length) return 0;
+  const store = loadHistoryStore();
+  const byId = {};
+  (store[key] || []).forEach((r) => { byId[r.id] = r; });
+  records.forEach((r) => { byId[r.id] = { id: r.id, teacher: r.name, dept: r.dept, status: r.status, delay: r.delay, deadline: r.deadline, punch: r.punch }; });
+  store[key] = Object.values(byId);
+  writeHistoryStore(store);
+  return records.length;
 }
 
 function buildRecords(tt, punchMap, date, nowMin) {
@@ -425,7 +485,7 @@ export default function FacultyFlowApp() {
               )}
               {page === "history" && (
                 <motion.div key="hist" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}>
-                  <HistoryPage c={c} onOpenTeacher={setDrawerTeacher} pushToast={pushToast} teachers={teachers} refreshKey={historyKey} />
+                  <HistoryPage c={c} onOpenTeacher={setDrawerTeacher} pushToast={pushToast} teachers={teachers} refreshKey={historyKey} tt={tt} onRefresh={() => setHistoryKey((k) => k + 1)} />
                 </motion.div>
               )}
               {page === "settings" && (
@@ -1124,12 +1184,54 @@ function StatMini({ c, label, value, tone }) {
 function toDateInput(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
 function fromDateInput(v) { const [y, m, d] = v.split("-").map(Number); return new Date(y, m - 1, d); }
 
-function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey }) {
+function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, tt, onRefresh }) {
   const today = new Date();
   const [startDate, setStartDate] = useState(toDateInput(new Date(today.getFullYear(), today.getMonth(), 1)));
   const [endDate, setEndDate] = useState(toDateInput(today));
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [pendingPast, setPendingPast] = useState(null);
+  const [pendingDate, setPendingDate] = useState("");
+  const [confirmFlush, setConfirmFlush] = useState(false);
+  const pastInputRef = useRef(null);
+
+  const savePastSheet = useCallback((map, dateStr, fileName) => {
+    const d = fromDateInput(dateStr);
+    const recs = buildRecords(tt, map, d, 24 * 60);
+    if (!recs.length) { pushToast("No matching records", "None of the punches matched the active timetable for that weekday.", "error"); return false; }
+    mergeHistoryDay(dateStr, recs);
+    onRefresh?.();
+    pushToast("Past sheet saved", `${recs.length} records for ${d.toLocaleDateString("en-IN")} added to History from ${fileName}.`, "success");
+    return true;
+  }, [tt, pushToast, onRefresh]);
+
+  const handlePastUpload = useCallback(async (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    if (!tt) { pushToast("Upload a timetable first", "Past punches are verified against the active timetable.", "error"); return; }
+    try {
+      const { map, date } = await parsePastPunchFile(f, tt.teachers);
+      if (!Object.keys(map).length) { pushToast("No punches matched", "No teacher names from the file matched the active timetable.", "error"); return; }
+      if (date) { savePastSheet(map, dayKey(date), f.name); return; }
+      setPendingPast({ map, name: f.name });
+      setPendingDate("");
+    } catch {
+      pushToast("Could not read punch sheet", "Expected columns for teacher name and punch time.", "error");
+    }
+  }, [tt, pushToast, savePastSheet]);
+
+  const confirmPendingDate = useCallback(() => {
+    if (!pendingPast || !pendingDate) return;
+    if (savePastSheet(pendingPast.map, pendingDate, pendingPast.name)) setPendingPast(null);
+  }, [pendingPast, pendingDate, savePastSheet]);
+
+  const flushHistory = useCallback(() => {
+    writeHistoryStore({});
+    setConfirmFlush(false);
+    onRefresh?.();
+    pushToast("History deleted", "All past records removed. Today's view is untouched.", "info");
+  }, [pushToast, onRefresh]);
 
   const allRows = useMemo(() => historyRows(), [refreshKey]);
 
@@ -1247,7 +1349,7 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey })
               className="w-full pl-8 pr-3 h-9 rounded-lg text-[12.5px] outline-none" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.ink }} />
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button onClick={async () => { await exportXLSX(exportRows(), `${fileBase}.xlsx`, "History"); pushToast("Excel exported", `${scopeLabel} · ${rangeLabel}`, "success"); }}
             className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: c.brand, color: "#fff" }}>
             <FileSpreadsheet size={13} /> Excel
@@ -1256,8 +1358,63 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey })
             className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.inkMuted }}>
             <Download size={13} /> PDF
           </button>
+          <input ref={pastInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handlePastUpload} />
+          <button onClick={() => pastInputRef.current?.click()}
+            className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.inkMuted }}>
+            <CalendarPlus size={13} /> Upload past sheet
+          </button>
+          <button onClick={() => setConfirmFlush(true)}
+            className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: STATUS_META.Absent.bg, border: `1px solid ${STATUS_META.Absent.fg}44`, color: STATUS_META.Absent.fg }}>
+            <Trash2 size={13} /> Flush all history
+          </button>
         </div>
       </div>
+
+      {pendingPast && (
+        <div className="rounded-2xl p-4 flex flex-col sm:flex-row sm:items-end gap-3" style={{ background: c.surface, border: `1px solid ${c.brand}55` }}>
+          <div className="flex-1">
+            <div className="text-[13px] font-bold">No date found in "{pendingPast.name}"</div>
+            <div className="text-[12px] mt-0.5" style={{ color: c.inkMuted }}>Pick the date this punch sheet belongs to. {Object.keys(pendingPast.map).length} punches matched the active timetable.</div>
+          </div>
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-wide mb-1.5" style={{ color: c.inkFaint }}>Sheet date</div>
+            <input type="date" value={pendingDate} max={toDateInput(new Date())} onChange={(e) => setPendingDate(e.target.value)}
+              className="h-9 px-2.5 rounded-lg text-[12.5px] outline-none" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.ink }} />
+          </div>
+          <div className="flex gap-2">
+            <button onClick={confirmPendingDate} disabled={!pendingDate}
+              className="h-9 px-3 rounded-lg text-[12.5px] font-semibold disabled:opacity-50" style={{ background: c.brand, color: "#fff" }}>Save to history</button>
+            <button onClick={() => setPendingPast(null)}
+              className="h-9 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.inkMuted }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      <AnimatePresence>
+        {confirmFlush && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.45)" }}
+            onClick={() => setConfirmFlush(false)}>
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+              className="rounded-2xl p-5 max-w-sm w-full" style={{ background: c.surface, border: `1px solid ${c.border}` }}
+              onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-2.5 mb-2">
+                <span className="h-9 w-9 rounded-xl inline-flex items-center justify-center" style={{ background: STATUS_META.Absent.bg, color: STATUS_META.Absent.fg }}><Trash2 size={16} /></span>
+                <h3 className="text-[15px] font-bold">Delete all history?</h3>
+              </div>
+              <p className="text-[12.5px] leading-relaxed" style={{ color: c.inkMuted }}>
+                Are you sure you want to permanently delete all historical attendance records? This action cannot be undone. Today's active view will not be affected.
+              </p>
+              <div className="flex justify-end gap-2 mt-4">
+                <button onClick={() => setConfirmFlush(false)}
+                  className="h-9 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.inkMuted }}>Cancel</button>
+                <button onClick={flushHistory}
+                  className="h-9 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: STATUS_META.Absent.fg, color: "#fff" }}>Delete permanently</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {query.trim() && !matchedTeacher && (
         <div className="rounded-2xl p-4 text-[12.5px]" style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.inkFaint }}>
