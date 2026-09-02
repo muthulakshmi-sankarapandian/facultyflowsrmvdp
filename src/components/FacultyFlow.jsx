@@ -1468,8 +1468,9 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
           </button>
           <input ref={pastInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handlePastUpload} />
           <button onClick={() => pastInputRef.current?.click()}
-            className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.inkMuted }}>
-            <CalendarPlus size={13} /> Upload past sheet
+            className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: c.brandLight, border: `1px solid ${c.brand}55`, color: c.brand }}>
+            <CalendarPlus size={13} /> Upload Past Punch Sheet
+
           </button>
           <button onClick={() => setConfirmFlush(true)}
             className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: STATUS_META.Absent.bg, border: `1px solid ${STATUS_META.Absent.fg}44`, color: STATUS_META.Absent.fg }}>
