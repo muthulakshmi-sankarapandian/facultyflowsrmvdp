@@ -497,11 +497,13 @@ export default function FacultyFlowApp() {
   const applyPunchUpload = useCallback(async (file) => {
     if (!tt) { pushToast("Upload a timetable first", "Punch data is verified against the active timetable.", "error"); return; }
     const map = await parsePunchFile(file, tt.teachers);
+    const n = Object.keys(map).length;
+    if (!n) { pushToast("No punches matched", "No faculty names in the punch sheet matched the active timetable.", "error"); return; }
     setPunchMap(map);
     persistState({ punch: map, punchName: file.name, punchDate: dayKey(new Date()) });
     setSources((s) => ({ ...s, punch: file.name }));
     setLastSync(new Date());
-    pushToast("Punch sheet applied", `${Object.keys(map).length} punches matched against today's timetable.`, "success");
+    pushToast("Punch sheet applied", `${n} punches matched against today's timetable.`, "success");
   }, [pushToast, tt]);
 
   const summary = useMemo(() => {
