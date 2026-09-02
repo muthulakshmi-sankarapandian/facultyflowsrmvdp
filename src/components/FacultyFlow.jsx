@@ -419,7 +419,7 @@ export default function FacultyFlowApp() {
 
         <div className="flex-1 min-w-0">
           <TopHeader
-            c={c} clock={clock} lastSync={lastSync} summary={summary} todayRecords={todayRecords}
+            c={c} clock={clock} lastSync={lastSync} summary={summary} todayRecords={todayRecords} teachers={teachers}
             themeMode={themeMode} setThemeMode={setThemeMode}
             onMenu={() => setMobileNavOpen(true)}
             onManualNote={() => syncNow(true)}
@@ -431,13 +431,13 @@ export default function FacultyFlowApp() {
                 <motion.div key="dash" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}>
                   <Dashboard c={c} records={todayRecords} summary={summary} onOpenTeacher={setDrawerTeacher}
                     pushToast={pushToast} syncNow={syncNow} lastSync={lastSync} watchConnected={watchConnected}
-                    setWatchConnected={setWatchConnected} sources={sources} setSources={setSources}
-                    clearPunchSheet={clearPunchSheet} applyPunchUpload={applyPunchUpload} />
+                    setWatchConnected={setWatchConnected} sources={sources} teachers={teachers}
+                    clearPunchSheet={clearPunchSheet} applyPunchUpload={applyPunchUpload} applyTimetableUpload={applyTimetableUpload} />
                 </motion.div>
               )}
               {page === "history" && (
                 <motion.div key="hist" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}>
-                  <HistoryPage c={c} onOpenTeacher={setDrawerTeacher} pushToast={pushToast} />
+                  <HistoryPage c={c} onOpenTeacher={setDrawerTeacher} pushToast={pushToast} teachers={teachers} refreshKey={historyKey} />
                 </motion.div>
               )}
               {page === "settings" && (
@@ -451,7 +451,8 @@ export default function FacultyFlowApp() {
         </div>
       </div>
 
-      <TeacherDrawer c={c} teacherId={drawerTeacher} onClose={() => setDrawerTeacher(null)} todayRecords={todayRecords} />
+      <TeacherDrawer c={c} teacherId={drawerTeacher} onClose={() => setDrawerTeacher(null)} todayRecords={todayRecords} teachers={teachers} />
+
       <ToastStack c={c} toasts={toasts} />
     </div>
   );
