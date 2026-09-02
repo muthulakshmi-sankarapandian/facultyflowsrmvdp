@@ -1299,15 +1299,34 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
     if (!f) return;
     if (!tt) { pushToast("Upload a timetable first", "Past punches are verified against the active timetable.", "error"); return; }
     try {
-      const { map, date } = await parsePastPunchFile(f, tt.teachers);
-      if (!Object.keys(map).length) { pushToast("No punches matched", "No teacher names from the file matched the active timetable.", "error"); return; }
-      if (date) { savePastSheet(map, dayKey(date), f.name); return; }
-      setPendingPast({ map, name: f.name });
-      setPendingDate("");
+      const sheets = await parsePastPunchFile(f, tt.teachers);
+      if (!sheets.length) { pushToast("No punches matched", "No teacher names from the file matched the active timetable.", "error"); return; }
+      const dated = sheets.filter((s) => s.date);
+      const undated = sheets.filter((s) => !s.date);
+      let saved = 0, days = 0;
+      dated.forEach((s) => {
+        const d = s.date;
+        const recs = buildRecords(tt, s.map, d, 24 * 60);
+        if (!recs.length) return;
+        mergeHistoryDay(dayKey(d), recs);
+        saved += recs.length; days++;
+      });
+      if (saved) {
+        onRefresh?.();
+        pushToast("Past sheet saved", `${saved} records across ${days} day${days > 1 ? "s" : ""} added to History from ${f.name}.`, "success");
+      }
+      if (undated.length) {
+        const map = {};
+        undated.forEach((s) => Object.entries(s.map).forEach(([k, v]) => { if (map[k] == null || v < map[k]) map[k] = v; }));
+        setPendingPast({ map, name: f.name });
+        setPendingDate("");
+      } else if (!saved) {
+        pushToast("No matching records", "None of the punches matched the active timetable for those weekdays.", "error");
+      }
     } catch {
       pushToast("Could not read punch sheet", "Expected columns for teacher name and punch time.", "error");
     }
-  }, [tt, pushToast, savePastSheet]);
+  }, [tt, pushToast, onRefresh]);
 
   const confirmPendingDate = useCallback(() => {
     if (!pendingPast || !pendingDate) return;
@@ -1322,6 +1341,7 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
   }, [pushToast, onRefresh]);
 
   const allRows = useMemo(() => historyRows(), [refreshKey]);
+
 
   const rangeRows = useMemo(() => {
     const s = fromDateInput(startDate);
