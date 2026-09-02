@@ -86,29 +86,35 @@ const TEACHERS = [
   { id: "t14", name: "Dr. Ravi Shankar", dept: "MBA", subject: "Business Analytics" },
 ];
 
-// Reporting deadline = first class time − buffer (default 5 min), per weekday. null = no class (Holiday).
+const HOUR_1 = "08:00";
+const HOUR_2 = "08:50";
 const TIMETABLE = {
-  t1: { Mon: "09:00", Tue: "09:00", Wed: "10:00", Thu: "09:00", Fri: "11:00" },
-  t2: { Mon: "08:30", Tue: "10:00", Wed: "08:30", Thu: "10:00", Fri: "08:30" },
-  t3: { Mon: "09:15", Tue: null, Wed: "09:15", Thu: "09:15", Fri: "10:30" },
-  t4: { Mon: "10:00", Tue: "09:00", Wed: "09:00", Thu: null, Fri: "09:00" },
-  t5: { Mon: "08:30", Tue: "08:30", Wed: "11:00", Thu: "08:30", Fri: null },
-  t6: { Mon: "09:00", Tue: "09:00", Wed: "09:00", Thu: "10:30", Fri: "09:00" },
-  t7: { Mon: "08:30", Tue: "10:00", Wed: "08:30", Thu: "08:30", Fri: "10:00" },
-  t8: { Mon: null, Tue: "09:15", Wed: "09:15", Thu: "09:15", Fri: "09:15" },
-  t9: { Mon: "11:00", Tue: "11:00", Wed: null, Thu: "11:00", Fri: "11:00" },
-  t10: { Mon: "09:00", Tue: "09:00", Wed: "10:00", Thu: "09:00", Fri: "09:00" },
-  t11: { Mon: "08:30", Tue: "08:30", Wed: "08:30", Thu: "08:30", Fri: null },
-  t12: { Mon: "10:30", Tue: "09:00", Wed: "09:00", Thu: "09:00", Fri: "09:00" },
-  t13: { Mon: "09:15", Tue: "09:15", Wed: "09:15", Thu: null, Fri: "09:15" },
-  t14: { Mon: "09:00", Tue: "09:00", Wed: "09:00", Thu: "09:00", Fri: null },
+  t1: { Mon: "08:00", Tue: "08:50", Wed: "09:40", Thu: "08:00", Fri: "10:30" },
+  t2: { Mon: "08:50", Tue: "09:40", Wed: "08:00", Thu: "09:40", Fri: "08:50" },
+  t3: { Mon: "09:40", Tue: null, Wed: "08:50", Thu: "08:50", Fri: "10:30" },
+  t4: { Mon: "10:30", Tue: "08:00", Wed: "08:50", Thu: null, Fri: "08:00" },
+  t5: { Mon: "08:00", Tue: "08:00", Wed: "10:30", Thu: "08:50", Fri: null },
+  t6: { Mon: "08:50", Tue: "08:50", Wed: "08:00", Thu: "09:40", Fri: "08:50" },
+  t7: { Mon: "08:00", Tue: "09:40", Wed: "08:00", Thu: "08:00", Fri: "09:40" },
+  t8: { Mon: null, Tue: "08:50", Wed: "08:50", Thu: "09:40", Fri: "08:00" },
+  t9: { Mon: "10:30", Tue: "10:30", Wed: null, Thu: "09:40", Fri: "10:30" },
+  t10: { Mon: "08:50", Tue: "08:00", Wed: "09:40", Thu: "08:50", Fri: "08:00" },
+  t11: { Mon: "08:00", Tue: "08:00", Wed: "08:50", Thu: "08:00", Fri: null },
+  t12: { Mon: "09:40", Tue: "08:50", Wed: "08:00", Thu: "08:50", Fri: "09:40" },
+  t13: { Mon: "08:50", Tue: "09:40", Wed: "08:00", Thu: null, Fri: "08:50" },
+  t14: { Mon: "08:00", Tue: "08:50", Wed: "09:40", Thu: "08:00", Fri: null },
 };
-
-// Fixed demo reference date/time so the dashboard reads sensibly regardless of real-world clock.
-const DEMO_DATE = new Date(2026, 7, 31); // Monday, 31 August 2026 — a working day
+const DEMO_DATE = new Date(2026, 7, 31);
 const DEMO_WEEKDAY = "Mon";
-const DEMO_NOW_MIN = 8 * 60 + 42; // 08:42 AM
-const REPORTING_BUFFER = 5; // minutes before class counted as on time
+const DEMO_NOW_MIN = 8 * 60 + 42;
+const END_OF_DAY_MIN = 17 * 60;
+function deadlineFor(classTime) {
+  if (classTime == null) return null;
+  if (classTime === HOUR_1) return 7 * 60 + 55;
+  if (classTime === HOUR_2) return 8 * 60 + 40;
+  return 9 * 60;
+}
+
 
 function toMin(hhmm) {
   if (!hhmm) return null;
@@ -133,60 +139,63 @@ function seeded(seed) {
   return () => (s = (s * 16807) % 2147483647) / 2147483647;
 }
 
-// Handcrafted "today" punches for a clear, realistic mix of statuses.
-const TODAY_PUNCH_OVERRIDE = {
-  t1: "08:51", t2: "08:38", t3: null, t4: "10:07", t5: "08:41",
-  t6: null, t7: "08:24", t9: null, t10: "09:04", t11: "08:20",
-  t12: "10:41", t13: "09:12", t14: "08:52",
+const BASE_PUNCHES = {
+  t1: "07:58", t2: "08:44", t4: "09:07", t5: "07:51",
+  t7: "08:04", t10: "08:52", t11: "07:50", t12: "09:41", t14: "08:12",
 };
-
+const PENDING_PUNCHES = [
+  { id: "t13", time: "08:47" },
+  { id: "t6", time: "08:58" },
+  { id: "t3", time: "09:12" },
+];
+function punchSheet(syncCount) {
+  const sheet = { ...BASE_PUNCHES };
+  PENDING_PUNCHES.slice(0, syncCount).forEach((p) => { sheet[p.id] = p.time; });
+  return sheet;
+}
 function computeStatus({ deadline, punch, nowMin, leave }) {
   if (deadline == null) return "Holiday";
   if (leave) return "Leave";
   if (punch != null) return punch <= deadline ? "Present" : "Late";
+  if (nowMin >= END_OF_DAY_MIN) return "Absent";
   return nowMin >= deadline ? "Absent" : "Waiting";
 }
-
-function buildTodayRecords() {
+function buildTodayRecords(syncCount = 0, nowMin = DEMO_NOW_MIN) {
+  const sheet = punchSheet(syncCount);
   return TEACHERS.map((t) => {
     const classTime = TIMETABLE[t.id][DEMO_WEEKDAY];
-    const deadline = classTime == null ? null : toMin(classTime) - REPORTING_BUFFER;
-    const leave = t.id === "t8"; // one teacher on approved leave today
-    const punchRaw = TODAY_PUNCH_OVERRIDE[t.id];
+    const deadline = deadlineFor(classTime);
+    const leave = t.id === "t8";
+    const punchRaw = sheet[t.id];
     const punch = leave || classTime == null ? null : (punchRaw ? toMin(punchRaw) : null);
-    const status = computeStatus({ deadline, punch, nowMin: DEMO_NOW_MIN, leave });
+    const status = computeStatus({ deadline, punch, nowMin, leave });
     const delay = status === "Late" ? punch - deadline : status === "Present" ? Math.max(deadline - punch, 0) * -1 : null;
-    return {
-      id: t.id, name: t.name, dept: t.dept, subject: t.subject,
-      firstClass: classTime, deadline, punch, status, delay,
-    };
+    return { id: t.id, name: t.name, dept: t.dept, subject: t.subject, firstClass: classTime, deadline, punch, status, delay };
   });
 }
-
 function buildHistory(teacherId, days = 30) {
   const rand = seeded(teacherId.charCodeAt(0) * 97 + teacherId.length * 13 + days);
   const out = [];
   let d = new Date(DEMO_DATE);
-  let count = 0;
   while (out.length < days) {
     d.setDate(d.getDate() - 1);
-    const dow = d.getDay(); // 0 sun .. 6 sat
-    if (dow === 0 || dow === 6) continue; // skip weekends
+    const dow = d.getDay();
+    if (dow === 0 || dow === 6) continue;
     const wd = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dow];
     const classTime = TIMETABLE[teacherId][wd];
-    if (classTime == null) { out.push({ date: new Date(d), status: "Holiday", delay: null }); continue; }
-    const deadline = toMin(classTime) - REPORTING_BUFFER;
+    if (classTime == null) { out.push({ date: new Date(d), status: "Holiday", delay: null, deadline: null, punch: null }); continue; }
+    const deadline = deadlineFor(classTime);
     const r = rand();
-    let status, delay;
-    if (r < 0.72) { status = "Present"; delay = -Math.round(rand() * 6); }
-    else if (r < 0.88) { status = "Late"; delay = Math.round(3 + rand() * 22); }
-    else if (r < 0.95) { status = "Absent"; delay = null; }
-    else { status = "Leave"; delay = null; }
-    out.push({ date: new Date(d), status, delay });
-    count++;
+    let status, delay, punch;
+    if (r < 0.72) { status = "Present"; delay = -Math.round(rand() * 6); punch = deadline + delay; }
+    else if (r < 0.88) { status = "Late"; delay = Math.round(3 + rand() * 22); punch = deadline + delay; }
+    else if (r < 0.95) { status = "Absent"; delay = null; punch = null; }
+    else { status = "Leave"; delay = null; punch = null; }
+    out.push({ date: new Date(d), status, delay, deadline, punch });
   }
   return out.reverse();
 }
+
 
 /* Month-to-date stats for a single teacher (used by search + drawer). */
 const MONTH_LABEL = DEMO_DATE.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
@@ -272,7 +281,9 @@ export default function FacultyFlowApp() {
   const [lastSync, setLastSync] = useState(new Date(Date.now() - 60000));
   const [toasts, setToasts] = useState([]);
   const [drawerTeacher, setDrawerTeacher] = useState(null);
-  const [bufferMin, setBufferMin] = useState(REPORTING_BUFFER);
+  const [syncCount, setSyncCount] = useState(0);
+  const [watchConnected, setWatchConnected] = useState(true);
+  const [sources, setSources] = useState({ timetable: "timetable-aug-2026.xlsx", punch: "punch-31-08-2026.xlsx" });
 
   const pushToast = useCallback((title, desc, kind = "success") => {
     const id = Math.random().toString(36).slice(2);
@@ -285,15 +296,29 @@ export default function FacultyFlowApp() {
     return () => clearInterval(iv);
   }, []);
 
-  useEffect(() => {
-    const iv = setInterval(() => {
+  const syncNow = useCallback((manual) => {
+    setSyncCount((n) => {
+      const next = Math.min(n + 1, PENDING_PUNCHES.length);
       setLastSync(new Date());
-      pushToast("Attendance updated", "New punch records synced from the biometric machine.", "sync");
-    }, 45000);
-    return () => clearInterval(iv);
+      if (next > n) pushToast("New punch record imported", `${PENDING_PUNCHES[next - 1].id.toUpperCase()} punched at ${PENDING_PUNCHES[next - 1].time}.`, "sync");
+      else if (manual) pushToast("Already up to date", "No new punch records found in the watched folder.", "info");
+      return next;
+    });
   }, [pushToast]);
 
-  const todayRecords = useMemo(() => buildTodayRecords(), []);
+  useEffect(() => {
+    const iv = setInterval(() => { if (watchConnected) syncNow(false); }, 20000);
+    return () => clearInterval(iv);
+  }, [syncNow, watchConnected]);
+
+  useEffect(() => {
+    if (watchConnected) return;
+    const t = setTimeout(() => { setWatchConnected(true); pushToast("Watch folder reconnected", "Connection restored automatically.", "success"); }, 4000);
+    return () => clearTimeout(t);
+  }, [watchConnected, pushToast]);
+
+  const todayRecords = useMemo(() => buildTodayRecords(syncCount), [syncCount]);
+
 
   const summary = useMemo(() => {
     const scheduled = todayRecords.filter((r) => r.status !== "Holiday").length;
@@ -325,15 +350,16 @@ export default function FacultyFlowApp() {
             c={c} clock={clock} lastSync={lastSync} summary={summary} todayRecords={todayRecords}
             themeMode={themeMode} setThemeMode={setThemeMode}
             onMenu={() => setMobileNavOpen(true)}
-            onManualNote={() => pushToast("Live sync active", "Faculty Flow watches the punch sheet automatically — no manual refresh needed.", "info")}
+            onManualNote={() => syncNow(true)}
           />
 
           <main className="px-4 sm:px-6 lg:px-8 py-6 max-w-[1400px] mx-auto">
             <AnimatePresence mode="wait">
               {page === "dashboard" && (
                 <motion.div key="dash" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}>
-                  <Dashboard c={c} records={todayRecords} summary={summary} bufferMin={bufferMin}
-                    onOpenTeacher={setDrawerTeacher} pushToast={pushToast} />
+                  <Dashboard c={c} records={todayRecords} summary={summary} onOpenTeacher={setDrawerTeacher}
+                    pushToast={pushToast} syncNow={syncNow} lastSync={lastSync} watchConnected={watchConnected}
+                    setWatchConnected={setWatchConnected} sources={sources} setSources={setSources} />
                 </motion.div>
               )}
               {page === "history" && (
@@ -343,10 +369,10 @@ export default function FacultyFlowApp() {
               )}
               {page === "settings" && (
                 <motion.div key="set" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}>
-                  <SettingsPage c={c} themeMode={themeMode} setThemeMode={setThemeMode}
-                    bufferMin={bufferMin} setBufferMin={setBufferMin} pushToast={pushToast} />
+                  <SettingsPage c={c} themeMode={themeMode} setThemeMode={setThemeMode} pushToast={pushToast} />
                 </motion.div>
               )}
+
             </AnimatePresence>
           </main>
         </div>
@@ -503,25 +529,23 @@ function TopHeader({ c, clock, lastSync, summary, themeMode, setThemeMode, onMen
 
 /* --------------------------------- DASHBOARD ---------------------------------- */
 
-function Dashboard({ c, records, summary, bufferMin, onOpenTeacher, pushToast }) {
+function Dashboard({ c, records, summary, onOpenTeacher, pushToast, syncNow, lastSync, watchConnected, setWatchConnected, sources, setSources }) {
   return (
     <div className="space-y-6">
       <div className="md:hidden">
         <TeacherSearch c={c} todayRecords={records} />
       </div>
+      <AttendanceTable c={c} records={records} onOpenTeacher={onOpenTeacher} pushToast={pushToast} />
       <SummarySection c={c} summary={summary} />
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-        <div className="xl:col-span-2">
-          <AttendanceTable c={c} records={records} onOpenTeacher={onOpenTeacher} pushToast={pushToast} />
-        </div>
-        <div className="space-y-5">
-          <AttentionPanel c={c} records={records} onOpenTeacher={onOpenTeacher} />
-          <UploadCard c={c} pushToast={pushToast} />
-        </div>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+        <AttentionPanel c={c} records={records} onOpenTeacher={onOpenTeacher} />
+        <UploadCard c={c} pushToast={pushToast} syncNow={syncNow} lastSync={lastSync}
+          watchConnected={watchConnected} setWatchConnected={setWatchConnected} sources={sources} setSources={setSources} />
       </div>
     </div>
   );
 }
+
 
 function SummarySection({ c, summary }) {
   const cards = [
@@ -637,62 +661,77 @@ function AttentionPanel({ c, records, onOpenTeacher }) {
   );
 }
 
-function UploadCard({ c, pushToast }) {
+function UploadCard({ c, pushToast, syncNow, lastSync, watchConnected, setWatchConnected, sources, setSources }) {
   const [refreshing, setRefreshing] = useState(false);
+  const ttRef = React.useRef(null);
+  const psRef = React.useRef(null);
+  const replace = (kind) => (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setSources((s) => ({ ...s, [kind]: f.name }));
+    pushToast(kind === "timetable" ? "Timetable replaced" : "Punch sheet replaced", `${f.name} imported and applied.`, "success");
+    e.target.value = "";
+  };
+  const doRefresh = () => { setRefreshing(true); syncNow(true); setTimeout(() => setRefreshing(false), 800); };
   return (
     <div className="rounded-2xl p-5" style={{ background: c.surface, border: `1px solid ${c.border}` }}>
       <h3 className="text-[13px] font-bold mb-3" style={{ fontFamily: "'Inter Tight', Inter, sans-serif" }}>Data sources</h3>
-
       <div className="space-y-2.5">
         <div className="flex items-center gap-3 rounded-xl p-3" style={{ background: c.surfaceAlt }}>
           <div className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: c.brandSoft }}>
             <FileSpreadsheet size={15} style={{ color: c.brand }} />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-[12.5px] font-semibold truncate">Weekly Timetable</div>
-            <div className="text-[11px]" style={{ color: c.inkFaint }}>Loaded · 14 teachers</div>
+            <div className="text-[12.5px] font-semibold truncate">Timetable</div>
+            <div className="text-[11px] truncate" style={{ color: c.inkFaint }}>{sources.timetable} · 14 teachers</div>
           </div>
-          <button onClick={() => pushToast("Timetable replaced", "The new weekly timetable has been imported and applied.", "success")}
-            className="text-[11.5px] font-semibold px-2.5 py-1.5 rounded-lg shrink-0" style={{ color: c.brand, background: c.brandSoft }}>
-            Replace
+          <input ref={ttRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={replace("timetable")} />
+          <button onClick={() => ttRef.current?.click()}
+            className="text-[11.5px] font-semibold px-2.5 py-1.5 rounded-lg shrink-0 inline-flex items-center gap-1" style={{ color: c.brand, background: c.brandSoft }}>
+            <Upload size={12} /> Replace
           </button>
         </div>
-
         <div className="flex items-center gap-3 rounded-xl p-3" style={{ background: c.surfaceAlt }}>
           <div className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: c.brandSoft }}>
             <PlugZap size={15} style={{ color: c.brand }} />
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-[12.5px] font-semibold truncate">Today's Punch Sheet</div>
-            <div className="text-[11px]" style={{ color: c.inkFaint }}>Updated 08:41 AM · 11 records</div>
+            <div className="text-[11px] truncate" style={{ color: c.inkFaint }}>{sources.punch} · synced {lastSync.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}</div>
           </div>
-          <button
-            onClick={() => { setRefreshing(true); pushToast("New punch record imported", "1 new record detected from the watched folder.", "success"); setTimeout(() => setRefreshing(false), 900); }}
+          <input ref={psRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={replace("punch")} />
+          <button onClick={() => psRef.current?.click()}
+            className="text-[11.5px] font-semibold px-2.5 py-1.5 rounded-lg shrink-0 inline-flex items-center gap-1" style={{ color: c.brand, background: c.brandSoft }}>
+            <Upload size={12} /> Replace
+          </button>
+          <button onClick={doRefresh} title="Refresh"
             className="h-7 w-7 inline-flex items-center justify-center rounded-lg shrink-0" style={{ color: c.brand, background: c.brandSoft }}>
             <RefreshCw size={13} className={refreshing ? "animate-spin" : ""} />
           </button>
         </div>
-
         <div className="flex items-center gap-3 rounded-xl p-3" style={{ background: c.surfaceAlt }}>
           <div className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: c.brandSoft }}>
             <FolderSync size={15} style={{ color: c.brand }} />
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-[12.5px] font-semibold truncate">Watch folder</div>
-            <div className="text-[11px]" style={{ color: c.brand }}>● Connected</div>
+            <div className="text-[11px]" style={{ color: watchConnected ? c.brand : STATUS_META.Absent.fg }}>
+              {watchConnected ? "● Connected · auto-syncing" : "● Disconnected · reconnecting…"}
+            </div>
           </div>
-          <button onClick={() => pushToast("Reconnected", "Watch folder connection refreshed.", "info")}
+          <button onClick={() => { setWatchConnected(false); pushToast("Connection dropped", "Watch folder will reconnect automatically.", "info"); }}
             className="text-[11.5px] font-semibold px-2.5 py-1.5 rounded-lg shrink-0" style={{ color: c.inkMuted, background: c.surface, border: `1px solid ${c.border}` }}>
-            Reconnect
+            Test drop
           </button>
         </div>
       </div>
       <p className="text-[10.5px] mt-3 leading-relaxed" style={{ color: c.inkFaint }}>
-        No manual refresh needed — new punches are detected and imported automatically.
+        New punches import automatically every few seconds; the watch folder reconnects on its own if the link drops.
       </p>
     </div>
   );
 }
+
 
 /* ------------------------------- ATTENDANCE TABLE ------------------------------ */
 
@@ -716,6 +755,27 @@ function exportCSV(rows, filename) {
   a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
 }
+
+async function exportXLSX(rows, filename, sheetName = "Report") {
+  const XLSX = await import("xlsx");
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 30));
+  XLSX.writeFile(wb, filename);
+}
+
+async function exportPDF(rows, filename, title) {
+  const { jsPDF } = await import("jspdf");
+  const autoTable = (await import("jspdf-autotable")).default;
+  const doc = new jsPDF({ orientation: "landscape" });
+  const head = [Object.keys(rows[0] || { Info: "" })];
+  const body = rows.map((r) => Object.values(r).map((v) => (v == null ? "" : String(v))));
+  doc.setFontSize(13);
+  doc.text(title, 14, 14);
+  autoTable(doc, { head, body, startY: 20, styles: { fontSize: 8 }, headStyles: { fillColor: [14, 124, 74] } });
+  doc.save(filename);
+}
+
 
 function AttendanceTable({ c, records, onOpenTeacher, pushToast }) {
   const [query, setQuery] = useState("");
