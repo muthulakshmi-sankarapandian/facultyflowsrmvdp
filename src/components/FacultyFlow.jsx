@@ -203,6 +203,66 @@ async function parsePunchFile(file, teachers) {
   return map;
 }
 
+function findSheetDate(grid, filename) {
+  for (const row of grid) {
+    for (const v of row || []) {
+      if (v instanceof Date && !isNaN(v)) return v;
+      const m = String(v ?? "").match(/(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{2,4})/);
+      if (m) {
+        let y = Number(m[3]); if (y < 100) y += 2000;
+        const d = new Date(y, Number(m[2]) - 1, Number(m[1]));
+        if (!isNaN(d) && d.getFullYear() > 2000) return d;
+      }
+    }
+  }
+  const fm = String(filename || "").match(/(\d{1,2})[.\-_ ](\d{1,2})[.\-_ ](\d{2,4})/);
+  if (fm) {
+    let y = Number(fm[3]); if (y < 100) y += 2000;
+    const d = new Date(y, Number(fm[2]) - 1, Number(fm[1]));
+    if (!isNaN(d)) return d;
+  }
+  return null;
+}
+
+async function parsePastPunchFile(file, teachers) {
+  const XLSX = await import("xlsx");
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: "array", cellDates: true });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const grid = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+  const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
+  const map = {};
+  rows.forEach((row) => {
+    const entries = Object.entries(row);
+    const nameEntry = entries.find(([k]) => /name|teacher|staff|faculty|employee/i.test(k));
+    const timeEntry = entries.find(([k]) => /time|punch|in\b/i.test(k));
+    if (!nameEntry || !timeEntry) return;
+    const nm = normName(nameEntry[1]);
+    const raw = timeEntry[1];
+    const match = raw instanceof Date ? [null, String(raw.getHours()), String(raw.getMinutes()).padStart(2, "0")] : String(raw).match(/(\d{1,2}):(\d{2})/);
+    if (!nm || !match) return;
+    const t = teachers.find((x) => {
+      const a = normName(x.name);
+      return a === nm || (a.length > 4 && nm.includes(a)) || (nm.length > 4 && a.includes(nm));
+    });
+    if (!t) return;
+    const min = Number(match[1]) * 60 + Number(match[2]);
+    if (map[t.id] == null || min < map[t.id]) map[t.id] = min;
+  });
+  return { map, date: findSheetDate(grid, file.name) };
+}
+
+function mergeHistoryDay(key, records) {
+  if (!records.length) return 0;
+  const store = loadHistoryStore();
+  const byId = {};
+  (store[key] || []).forEach((r) => { byId[r.id] = r; });
+  records.forEach((r) => { byId[r.id] = { id: r.id, teacher: r.name, dept: r.dept, status: r.status, delay: r.delay, deadline: r.deadline, punch: r.punch }; });
+  store[key] = Object.values(byId);
+  writeHistoryStore(store);
+  return records.length;
+}
+
 function buildRecords(tt, punchMap, date, nowMin) {
   if (!tt || !punchMap) return [];
   const wd = DAY_KEYS[date.getDay()];
