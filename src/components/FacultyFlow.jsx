@@ -313,25 +313,8 @@ async function parsePastPunchFile(file, teachers) {
   const ws = wb.Sheets[wb.SheetNames[0]];
   const grid = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
   const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
-  const map = {};
-  rows.forEach((row) => {
-    const entries = Object.entries(row);
-    const nameEntry = entries.find(([k]) => /name|teacher|staff|faculty|employee/i.test(k));
-    const timeEntry = entries.find(([k]) => /time|punch|in\b/i.test(k));
-    if (!nameEntry || !timeEntry) return;
-    const nm = normName(nameEntry[1]);
-    const raw = timeEntry[1];
-    const match = raw instanceof Date ? [null, String(raw.getHours()), String(raw.getMinutes()).padStart(2, "0")] : String(raw).match(/(\d{1,2}):(\d{2})/);
-    if (!nm || !match) return;
-    const t = teachers.find((x) => {
-      const a = normName(x.name);
-      return a === nm || (a.length > 4 && nm.includes(a)) || (nm.length > 4 && a.includes(nm));
-    });
-    if (!t) return;
-    const min = Number(match[1]) * 60 + Number(match[2]);
-    if (map[t.id] == null || min < map[t.id]) map[t.id] = min;
-  });
-  return { map, date: findSheetDate(grid, file.name) };
+  return { map: punchRowsToMap(rows, teachers), date: findSheetDate(grid, file.name) };
+
 }
 
 function mergeHistoryDay(key, records) {
