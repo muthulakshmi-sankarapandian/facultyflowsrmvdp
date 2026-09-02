@@ -160,18 +160,48 @@ function computeStatus({ deadline, punch, nowMin, leave }) {
   if (nowMin >= END_OF_DAY_MIN) return "Absent";
   return nowMin >= deadline ? "Absent" : "Waiting";
 }
-function buildTodayRecords(syncCount = 0, nowMin = DEMO_NOW_MIN) {
-  const sheet = punchSheet(syncCount);
-  return TEACHERS.map((t) => {
+function buildTodayRecords(syncCount = 0, nowMin = DEMO_NOW_MIN, override = null) {
+  const sheet = override || punchSheet(syncCount);
+  return TEACHERS.filter((t) => TIMETABLE[t.id][DEMO_WEEKDAY] != null).map((t) => {
     const classTime = TIMETABLE[t.id][DEMO_WEEKDAY];
     const deadline = deadlineFor(classTime);
-    const leave = t.id === "t8";
+    const leave = !override && t.id === "t8";
     const punchRaw = sheet[t.id];
-    const punch = leave || classTime == null ? null : (punchRaw ? toMin(punchRaw) : null);
-    const status = computeStatus({ deadline, punch, nowMin, leave });
+    const punch = leave ? null : (punchRaw ? toMin(punchRaw) : null);
+    const status = computeStatus({ deadline, punch, nowMin: override ? END_OF_DAY_MIN : nowMin, leave });
     const delay = status === "Late" ? punch - deadline : status === "Present" ? Math.max(deadline - punch, 0) * -1 : null;
     return { id: t.id, name: t.name, dept: t.dept, subject: t.subject, firstClass: classTime, deadline, punch, status, delay };
   });
+}
+async function parsePunchFile(file) {
+  const XLSX = await import("xlsx");
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: "array" });
+  const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+  const map = {};
+  rows.forEach((r) => {
+    const vals = Object.entries(r);
+    const nameEntry = vals.find(([k]) => /name|teacher|staff/i.test(k));
+    const timeEntry = vals.find(([k]) => /time|punch|in/i.test(k));
+    if (!nameEntry || !timeEntry) return;
+    const name = String(nameEntry[1]).trim().toLowerCase();
+    const time = String(timeEntry[1]).trim().slice(0, 5);
+    if (!name || !/^\d{1,2}:\d{2}$/.test(time)) return;
+    const t = TEACHERS.find((x) => x.name.toLowerCase() === name || x.name.toLowerCase().includes(name) || name.includes(x.name.toLowerCase()));
+    if (t && TIMETABLE[t.id][DEMO_WEEKDAY] != null) map[t.id] = time.padStart(5, "0");
+  });
+  return map;
+}
+const HISTORY_KEY = "ff_history_store";
+function loadHistoryStore() {
+  if (typeof window === "undefined") return {};
+  try { return JSON.parse(window.localStorage.getItem(HISTORY_KEY) || "{}"); } catch { return {}; }
+}
+function saveHistoryDay(dateKey, records) {
+  if (typeof window === "undefined" || !records.length) return;
+  const store = loadHistoryStore();
+  store[dateKey] = records.map((r) => ({ id: r.id, teacher: r.name, dept: r.dept, status: r.status, delay: r.delay, deadline: r.deadline, punch: r.punch }));
+  try { window.localStorage.setItem(HISTORY_KEY, JSON.stringify(store)); } catch { /* quota */ }
 }
 function buildHistory(teacherId, days = 30) {
   const rand = seeded(teacherId.charCodeAt(0) * 97 + teacherId.length * 13 + days);
