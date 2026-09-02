@@ -906,6 +906,11 @@ function AttendanceTable({ c, records, onOpenTeacher, pushToast, clearPunchSheet
             className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: c.brand, color: "#fff" }}>
             <Download size={13} /> Export
           </button>
+          <button onClick={clearPunchSheet}
+            className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12.5px] font-semibold"
+            style={{ background: STATUS_META.Absent.bg, color: STATUS_META.Absent.fg }}>
+            <XCircle size={13} /> Clear Punch Sheet
+          </button>
         </div>
       </div>
 
