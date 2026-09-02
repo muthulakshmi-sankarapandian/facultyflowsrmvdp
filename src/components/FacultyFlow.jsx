@@ -546,7 +546,7 @@ function Sidebar({ c, page, setPage, open, setOpen, mobileOpen, setMobileOpen })
 
 /* -------------------------------- TOP HEADER --------------------------------- */
 
-function TopHeader({ c, clock, lastSync, summary, themeMode, setThemeMode, onMenu, onManualNote, todayRecords }) {
+function TopHeader({ c, clock, lastSync, summary, themeMode, setThemeMode, onMenu, onManualNote, todayRecords, teachers }) {
   const timeStr = clock.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
   const syncStr = lastSync.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
 
@@ -563,7 +563,7 @@ function TopHeader({ c, clock, lastSync, summary, themeMode, setThemeMode, onMen
         </div>
 
         <div className="hidden md:block ml-6 flex-1 max-w-sm">
-          <TeacherSearch c={c} todayRecords={todayRecords} />
+          <TeacherSearch c={c} todayRecords={todayRecords} teachers={teachers} />
         </div>
 
         <div className="ml-auto flex items-center gap-2 sm:gap-4">
