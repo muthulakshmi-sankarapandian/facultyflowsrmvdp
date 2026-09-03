@@ -1318,73 +1318,45 @@ function StatMini({ c, label, value, tone }) {
 function toDateInput(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
 function fromDateInput(v) { const [y, m, d] = v.split("-").map(Number); return new Date(y, m - 1, d); }
 
-function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, tt, onRefresh }) {
+function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, tt, settings, onRefresh }) {
   const today = new Date();
   const [startDate, setStartDate] = useState(toDateInput(new Date(today.getFullYear(), today.getMonth(), 1)));
   const [endDate, setEndDate] = useState(toDateInput(today));
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
-  const [pendingPast, setPendingPast] = useState(null);
-  const [pendingDate, setPendingDate] = useState("");
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [pendingDate, setPendingDate] = useState(toDateInput(today));
   const [confirmFlush, setConfirmFlush] = useState(false);
   const pastInputRef = useRef(null);
 
-  const savePastSheet = useCallback((map, dateStr, fileName) => {
-    const d = fromDateInput(dateStr);
-    const recs = buildRecords(tt, map, d, 24 * 60);
-    if (!recs.length) { pushToast("No matching records", "None of the punches matched the active timetable for that weekday.", "error"); return false; }
-    mergeHistoryDay(dateStr, recs);
-    setStartDate((p) => (dateStr < p ? dateStr : p));
-    setEndDate((p) => (!p || dateStr > p ? dateStr : p));
-    onRefresh?.();
-    pushToast("Past sheet saved", `${recs.length} records for ${d.toLocaleDateString("en-IN")} added to History from ${fileName}.`, "success");
-    return true;
-  }, [tt, pushToast, onRefresh]);
-
+  const openUpload = useCallback(() => {
+    if (!tt) { pushToast("Upload a timetable first", "Past punches are verified against the active timetable.", "error"); return; }
+    setPendingDate(toDateInput(new Date()));
+    setUploadOpen(true);
+  }, [tt, pushToast]);
 
   const handlePastUpload = useCallback(async (e) => {
     const f = e.target.files?.[0];
     e.target.value = "";
-    if (!f) return;
-    if (!tt) { pushToast("Upload a timetable first", "Past punches are verified against the active timetable.", "error"); return; }
+    if (!f || !tt || !pendingDate) return;
     try {
       const sheets = await parsePastPunchFile(f, tt.teachers);
-      if (!sheets.length) { pushToast("No punches matched", "No teacher names from the file matched the active timetable.", "error"); return; }
-      const dated = sheets.filter((s) => s.date);
-      const undated = sheets.filter((s) => !s.date);
-      let saved = 0, days = 0;
-      dated.forEach((s) => {
-        const d = s.date;
-        const recs = buildRecords(tt, s.map, d, 24 * 60);
-        if (!recs.length) return;
-        mergeHistoryDay(dayKey(d), recs);
-        saved += recs.length; days++;
-      });
-      if (saved) {
-        const keys = dated.map((s) => toDateInput(s.date)).sort();
-        setStartDate((p) => (keys[0] < p ? keys[0] : p));
-        setEndDate((p) => (!p || keys[keys.length - 1] > p ? keys[keys.length - 1] : p));
-        onRefresh?.();
-        pushToast("Past sheet saved", `${saved} records across ${days} day${days > 1 ? "s" : ""} added to History from ${f.name}.`, "success");
-      }
-
-      if (undated.length) {
-        const map = {};
-        undated.forEach((s) => Object.entries(s.map).forEach(([k, v]) => { if (map[k] == null || v < map[k]) map[k] = v; }));
-        setPendingPast({ map, name: f.name });
-        setPendingDate("");
-      } else if (!saved) {
-        pushToast("No matching records", "None of the punches matched the active timetable for those weekdays.", "error");
-      }
+      const map = {};
+      sheets.forEach((s) => Object.entries(s.map).forEach(([k, v]) => { if (map[k] == null || v < map[k]) map[k] = v; }));
+      if (!Object.keys(map).length) { pushToast("No punches matched", "No teacher names from the file matched the active timetable.", "error"); return; }
+      const d = fromDateInput(pendingDate);
+      const recs = buildRecords(tt, map, d, 24 * 60, settings);
+      if (!recs.length) { pushToast("No matching records", "No faculty are scheduled on that weekday in the active timetable.", "error"); return; }
+      mergeHistoryDay(pendingDate, recs);
+      setStartDate((p) => (pendingDate < p ? pendingDate : p));
+      setEndDate((p) => (!p || pendingDate > p ? pendingDate : p));
+      setUploadOpen(false);
+      onRefresh?.();
+      pushToast("Past sheet saved", `${recs.length} records for ${d.toLocaleDateString("en-IN")} added to History from ${f.name}.`, "success");
     } catch {
       pushToast("Could not read punch sheet", "Expected columns for teacher name and punch time.", "error");
     }
-  }, [tt, pushToast, onRefresh]);
-
-  const confirmPendingDate = useCallback(() => {
-    if (!pendingPast || !pendingDate) return;
-    if (savePastSheet(pendingPast.map, pendingDate, pendingPast.name)) setPendingPast(null);
-  }, [pendingPast, pendingDate, savePastSheet]);
+  }, [tt, pendingDate, settings, pushToast, onRefresh]);
 
   const flushHistory = useCallback(() => {
     writeHistoryStore({});
