@@ -618,7 +618,8 @@ export default function FacultyFlowApp() {
               )}
               {page === "history" && (
                 <motion.div key="hist" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}>
-                  <HistoryPage c={c} onOpenTeacher={setDrawerTeacher} pushToast={pushToast} teachers={teachers} refreshKey={historyKey} tt={tt} onRefresh={() => setHistoryKey((k) => k + 1)} />
+                  <HistoryPage c={c} onOpenTeacher={setDrawerTeacher} pushToast={pushToast} teachers={teachers} refreshKey={historyKey} tt={tt} settings={settings} onRefresh={() => setHistoryKey((k) => k + 1)} />
+
                 </motion.div>
               )}
               {page === "settings" && (
