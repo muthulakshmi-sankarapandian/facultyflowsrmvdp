@@ -529,8 +529,12 @@ export default function FacultyFlowApp() {
     return () => window.removeEventListener("ff-settings", fn);
   }, []);
   const updateSettings = useCallback((patch) => {
-    setSettings((prev) => { const next = typeof patch === "function" ? patch(prev) : { ...prev, ...patch }; saveSettings(next); return next; });
+    const prev = loadSettings();
+    const next = typeof patch === "function" ? patch(prev) : { ...prev, ...patch };
+    saveSettings(next);
+    setSettings(next);
   }, []);
+
 
   const nowMin = clock.getHours() * 60 + clock.getMinutes();
   const todayRecords = useMemo(() => buildRecords(tt, punchMap, clock, nowMin, settings), [tt, punchMap, nowMin, settings]);
