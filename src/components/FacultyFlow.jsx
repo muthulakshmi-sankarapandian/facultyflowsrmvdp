@@ -62,6 +62,7 @@ const STATUS_META = {
   Absent: { fg: "#B4232A", bg: "#FBE6E5", dot: "#D5333B" },
   Waiting: { fg: "#1D5DBF", bg: "#E4EEFC", dot: "#2E6FDB" },
   Leave: { fg: "#7A3FBF", bg: "#F0E6FC", dot: "#8A4FD0" },
+  OD: { fg: "#0F766E", bg: "#DDF4F1", dot: "#0D9488" },
   Holiday: { fg: "#5B6459", bg: "#EEF0EC", dot: "#8B9285" },
 };
 
@@ -321,12 +322,15 @@ function punchRowsToMap(rows, teachers) {
     const entries = Object.entries(row).filter(([k]) => k !== "__rowNum__");
     const nameEntry = pickEntry(entries, [/faculty\s*name/i, /(teacher|staff|employee)\s*name/i, /^name$/i, /name/i]);
     const timeEntry = pickEntry(entries, [/first\s*in/i, /in\s*time/i, /punch/i, /\bin\b/i, /time/i]);
-    if (!nameEntry || !timeEntry) return;
-    const min = punchToMin(timeEntry[1]);
-    if (min == null || min <= 0) return;
+    if (!nameEntry) return;
+    const typeEntry = pickEntry(entries, [/attendance\s*type/i, /\btype\b/i]);
+    const isOD = typeEntry && /on\s*field/i.test(String(typeEntry[1]));
+    const min = timeEntry ? punchToMin(timeEntry[1]) : null;
+    if (!isOD && (min == null || min <= 0)) return;
     const t = fuzzyFindTeacher(teachers, nameEntry[1]);
     if (!t) return;
-    if (map[t.id] == null || min < map[t.id]) map[t.id] = min;
+    if (isOD) { if (map[t.id] == null || map[t.id] === "OD") map[t.id] = "OD"; return; }
+    if (map[t.id] == null || map[t.id] === "OD" || min < map[t.id]) map[t.id] = min;
   });
   return map;
 }
@@ -409,8 +413,10 @@ function buildRecords(tt, punchMap, date, nowMin, settings) {
     .map((t) => {
       const hour = tt.timetable[t.id][wd];
       const deadline = deadlineForHour(hour, st);
-      const punch = punchMap[t.id] == null ? null : punchMap[t.id];
-      const status = blocked ? "Holiday" : punch != null ? (punch <= deadline ? "Present" : "Late") : nowMin >= deadline ? "Absent" : "Waiting";
+      const raw = punchMap[t.id];
+      const isOD = raw === "OD";
+      const punch = raw == null || isOD ? null : raw;
+      const status = blocked ? "Holiday" : isOD ? "OD" : punch != null ? (punch <= deadline ? "Present" : "Late") : nowMin >= deadline ? "Absent" : "Waiting";
       return {
         id: t.id, name: t.name, dept: t.dept, subject: (tt.subjects[t.id] || {})[wd] || "—",
         hour, firstClass: hour, deadline, punch, status,
@@ -425,17 +431,18 @@ function monthStats(teacherId, todayRecord) {
   if (todayRecord && !rows.some((r) => dayKey(r.date) === dayKey(now))) rows.push({ date: now, status: todayRecord.status, delay: todayRecord.delay });
   const working = rows.filter((r) => r.status !== "Holiday");
   const lateRows = rows.filter((r) => r.status === "Late");
-  const present = rows.filter((r) => r.status === "Present").length;
-  const absent = rows.filter((r) => r.status === "Absent").length;
-  const leave = rows.filter((r) => r.status === "Leave").length;
-  const totalLateMin = lateRows.reduce((a, b) => a + (b.delay || 0), 0);
-  return {
-    month: now.toLocaleDateString("en-IN", { month: "long", year: "numeric" }),
-    rows, lateRows,
-    workingDays: working.length,
-    late: lateRows.length,
-    present, absent, leave,
-    pct: working.length ? Math.round(((present + lateRows.length) / working.length) * 100) : 0,
+    const present = rows.filter((r) => r.status === "Present").length;
+    const absent = rows.filter((r) => r.status === "Absent").length;
+    const leave = rows.filter((r) => r.status === "Leave").length;
+    const od = rows.filter((r) => r.status === "OD").length;
+    const totalLateMin = lateRows.reduce((a, b) => a + (b.delay || 0), 0);
+    return {
+      month: now.toLocaleDateString("en-IN", { month: "long", year: "numeric" }),
+      rows, lateRows,
+      workingDays: working.length,
+      late: lateRows.length,
+      present, absent, leave, od,
+      pct: working.length ? Math.round(((present + lateRows.length + od) / working.length) * 100) : 0,
     avgLate: lateRows.length ? Math.round(totalLateMin / lateRows.length) : 0,
     totalLateMin,
   };
@@ -597,9 +604,9 @@ export default function FacultyFlowApp() {
   const summary = useMemo(() => {
     const scheduled = todayRecords.filter((r) => r.status !== "Holiday").length;
     const by = (s) => todayRecords.filter((r) => r.status === s).length;
-    const present = by("Present"), late = by("Late"), absent = by("Absent"), waiting = by("Waiting"), leave = by("Leave");
-    const pct = scheduled ? Math.round(((present + late) / scheduled) * 100) : 0;
-    return { scheduled, present, late, absent, waiting, leave, pct };
+    const present = by("Present"), late = by("Late"), absent = by("Absent"), waiting = by("Waiting"), leave = by("Leave"), od = by("OD");
+    const pct = scheduled ? Math.round(((present + late + od) / scheduled) * 100) : 0;
+    return { scheduled, present, late, absent, waiting, leave, od, pct };
   }, [todayRecords]);
 
 
@@ -833,10 +840,12 @@ function SummarySection({ c, summary }) {
     { label: "Present", value: summary.present, icon: CheckCircle2, tone: STATUS_META.Present.fg },
     { label: "Late", value: summary.late, icon: Clock, tone: STATUS_META.Late.fg },
     { label: "Absent", value: summary.absent, icon: XCircle, tone: STATUS_META.Absent.fg },
+    { label: "On Duty", value: summary.od, icon: Coffee, tone: STATUS_META.OD.fg },
     { label: "Waiting", value: summary.waiting, icon: Timer, tone: STATUS_META.Waiting.fg },
   ];
   const segs = [
     { label: "Present", v: summary.present, color: STATUS_META.Present.dot },
+    { label: "OD", v: summary.od, color: STATUS_META.OD.dot },
     { label: "Late", v: summary.late, color: STATUS_META.Late.dot },
     { label: "Absent", v: summary.absent, color: STATUS_META.Absent.dot },
     { label: "Waiting", v: summary.waiting, color: STATUS_META.Waiting.dot },
@@ -863,7 +872,7 @@ function SummarySection({ c, summary }) {
         ))}
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
         {cards.map((cd) => (
           <div key={cd.label} className="rounded-xl p-3.5" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}` }}>
             <div className="flex items-center gap-1.5 mb-2">
@@ -1117,7 +1126,7 @@ function AttendanceTable({ c, records, onOpenTeacher, pushToast, clearPunchSheet
           </div>
           <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); }}
             className="h-9 rounded-lg text-[12.5px] px-2.5 outline-none" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.ink }}>
-            {["All", "Present", "Late", "Absent", "Waiting", "Leave", "Holiday"].map((s) => <option key={s} value={s}>{s}</option>)}
+            {["All", "Present", "Late", "Absent", "OD", "Waiting", "Leave", "Holiday"].map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
           <div className="relative">
             <button onClick={() => setColMenuOpen((o) => !o)} className="h-9 w-9 inline-flex items-center justify-center rounded-lg"
@@ -1176,8 +1185,8 @@ function AttendanceTable({ c, records, onOpenTeacher, pushToast, clearPunchSheet
                 {col("subject") && <td className="px-4 py-3 whitespace-nowrap" style={{ color: c.inkMuted }}>{r.subject}</td>}
                 {col("firstClass") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkMuted }}>{hourLabel(r.hour)}</td>}
                 {col("deadline") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkMuted }}>{minToLabel(r.deadline)}</td>}
-                {col("punch") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkMuted }}>{minToLabel(r.punch)}</td>}
-                {col("delay") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: r.status === "Late" ? STATUS_META.Late.fg : c.inkFaint }}>{r.status === "Late" ? `+${r.delay} min` : "—"}</td>}
+{col("punch") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: r.status === "OD" ? STATUS_META.OD.fg : c.inkMuted }}>{r.status === "OD" ? "OD" : minToLabel(r.punch)}</td>}
+                {col("delay") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: r.status === "Late" ? STATUS_META.Late.fg : r.status === "OD" ? STATUS_META.OD.fg : c.inkFaint }}>{r.status === "OD" ? "OD" : r.status === "Late" ? `+${r.delay} min` : "—"}</td>}
                 {col("status") && <td className="px-4 py-3 whitespace-nowrap"><Badge status={r.status} /></td>}
               </tr>
             ))}
@@ -1222,8 +1231,9 @@ function TeacherDrawer({ c, teacherId, onClose, todayRecords, teachers = [] }) {
     const present = working.filter((h) => h.status === "Present").length;
     const late = working.filter((h) => h.status === "Late").length;
     const absent = working.filter((h) => h.status === "Absent").length;
-    const pct = working.length ? Math.round(((present + late) / working.length) * 100) : 0;
-    return { workingDays: working.length, present, late, absent, pct };
+    const od = working.filter((h) => h.status === "OD").length;
+    const pct = working.length ? Math.round(((present + late + od) / working.length) * 100) : 0;
+    return { workingDays: working.length, present, late, absent, od, pct };
   }, [history]);
 
   const chartData = history.slice(-14).map((h) => ({
@@ -1262,17 +1272,19 @@ function TeacherDrawer({ c, teacherId, onClose, todayRecords, teachers = [] }) {
                 <div className="grid grid-cols-2 gap-3 text-[12.5px]">
                   <div><div style={{ color: c.inkFaint }} className="text-[11px]">Subject</div><div className="font-semibold">{today?.subject || "—"}</div></div>
                   <div><div style={{ color: c.inkFaint }} className="text-[11px]">Reporting time</div><div className="font-semibold ff-mono">{today ? minToLabel(today.deadline) : "—"}</div></div>
-                  <div><div style={{ color: c.inkFaint }} className="text-[11px]">Punch time</div><div className="font-semibold ff-mono">{today ? minToLabel(today.punch) : "—"}</div></div>
-                  <div><div style={{ color: c.inkFaint }} className="text-[11px]">Delay</div><div className="font-semibold ff-mono">{today?.status === "Late" ? `+${today.delay} min` : "—"}</div></div>
+<div><div style={{ color: c.inkFaint }} className="text-[11px]">Punch time</div><div className="font-semibold ff-mono" style={{ color: today?.status === "OD" ? STATUS_META.OD.fg : undefined }}>{today ? (today.status === "OD" ? "OD" : minToLabel(today.punch)) : "—"}</div></div>
+                  <div><div style={{ color: c.inkFaint }} className="text-[11px]">Delay</div><div className="font-semibold ff-mono" style={{ color: today?.status === "OD" ? STATUS_META.OD.fg : undefined }}>{today?.status === "OD" ? "OD" : today?.status === "Late" ? `+${today.delay} min` : "—"}</div></div>
                 </div>
               </div>
 
               {stats && (
-                <div className="grid grid-cols-4 gap-2.5">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                   <StatMini c={c} label="Attendance" value={`${stats.pct}%`} tone={c.brand} />
                   <StatMini c={c} label="Late (30d)" value={stats.late} tone={STATUS_META.Late.fg} />
-                  <StatMini c={c} label="Late this month" value={mStats.late} tone={STATUS_META.Late.fg} />
                   <StatMini c={c} label="Absent (30d)" value={stats.absent} tone={STATUS_META.Absent.fg} />
+                  <StatMini c={c} label="OD days (30d)" value={stats.od} tone={STATUS_META.OD.fg} />
+                  <StatMini c={c} label="OD this month" value={mStats.od} tone={STATUS_META.OD.fg} />
+                  <StatMini c={c} label="Late this month" value={mStats.late} tone={STATUS_META.Late.fg} />
                 </div>
               )}
 
@@ -1364,7 +1376,7 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
     try {
       const sheets = await parsePastPunchFile(f, tt.teachers);
       const map = {};
-      sheets.forEach((s) => Object.entries(s.map).forEach(([k, v]) => { if (map[k] == null || v < map[k]) map[k] = v; }));
+      sheets.forEach((s) => Object.entries(s.map).forEach(([k, v]) => { if (map[k] == null || (v !== "OD" && (map[k] === "OD" || v < map[k]))) map[k] = v; }));
       if (!Object.keys(map).length) { pushToast("No punches matched", "No teacher names from the file matched the active timetable.", "error"); return; }
       const d = fromDateInput(pendingDate);
       const recs = buildRecords(tt, map, d, 24 * 60, settings);
@@ -1415,14 +1427,16 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
     const present = working.filter((r) => r.status === "Present").length;
     const late = working.filter((r) => r.status === "Late").length;
     const absent = working.filter((r) => r.status === "Absent").length;
+    const od = working.filter((r) => r.status === "OD").length;
     const delays = working.filter((r) => r.status === "Late").map((r) => r.delay || 0);
     return {
       workingDays: new Set(working.map((r) => r.date.toDateString())).size,
-      presentPct: working.length ? Math.round((present / working.length) * 100) : 0,
+      presentPct: working.length ? Math.round(((present + od) / working.length) * 100) : 0,
       latePct: working.length ? Math.round((late / working.length) * 100) : 0,
       absentPct: working.length ? Math.round((absent / working.length) * 100) : 0,
       lateCount: late,
       absentCount: absent,
+      odCount: od,
       avgDelay: delays.length ? Math.round(delays.reduce((a, b) => a + b, 0) / delays.length) : 0,
     };
   }, [scopedRows]);
@@ -1432,7 +1446,7 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
     [...scopedRows].sort((a, b) => a.date - b.date).forEach((r) => {
       const key = r.date.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
       byDate[key] = byDate[key] || { date: key, present: 0, total: 0 };
-      if (r.status !== "Holiday") { byDate[key].total++; if (r.status === "Present" || r.status === "Late") byDate[key].present++; }
+      if (r.status !== "Holiday") { byDate[key].total++; if (r.status === "Present" || r.status === "Late" || r.status === "OD") byDate[key].present++; }
     });
     return Object.values(byDate).map((d) => ({ date: d.date, pct: d.total ? Math.round((d.present / d.total) * 100) : 0 }));
   }, [scopedRows]);
@@ -1443,7 +1457,7 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
       if (r.status === "Holiday") return;
       byDept[r.dept] = byDept[r.dept] || { dept: r.dept, present: 0, total: 0 };
       byDept[r.dept].total++;
-      if (r.status === "Present" || r.status === "Late") byDept[r.dept].present++;
+      if (r.status === "Present" || r.status === "Late" || r.status === "OD") byDept[r.dept].present++;
     });
     return Object.values(byDept).map((d) => ({ dept: d.dept.replace(" (ECE)", ""), pct: Math.round((d.present / d.total) * 100) }));
   }, [scopedRows]);
@@ -1454,7 +1468,7 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
       if (r.status === "Holiday") return;
       byT[r.id] = byT[r.id] || { name: r.teacher, present: 0, total: 0 };
       byT[r.id].total++;
-      if (r.status === "Present") byT[r.id].present++;
+      if (r.status === "Present" || r.status === "OD") byT[r.id].present++;
     });
     return Object.values(byT).map((t) => ({ name: t.name.replace(/^(Dr\.|Mr\.|Mrs\.|Ms\.)\s/, ""), pct: Math.round((t.present / t.total) * 100) }))
       .sort((a, b) => b.pct - a.pct).slice(0, 8);
@@ -1477,8 +1491,8 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
     Teacher: r.teacher,
     Department: r.dept,
     Deadline: minToLabel(r.deadline),
-    Punch: minToLabel(r.punch),
-    Delay: r.status === "Late" ? `${r.delay} min` : "",
+    Punch: r.status === "OD" ? "OD" : minToLabel(r.punch),
+    Delay: r.status === "OD" ? "OD" : r.status === "Late" ? `${r.delay} min` : "",
     Status: r.status,
   }));
   const fileBase = `faculty-flow-${matchedTeacher ? matchedTeacher.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase() : "all-teachers"}`;
@@ -1591,15 +1605,16 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
         <div className="rounded-2xl p-5" style={{ background: c.surface, border: `1px solid ${c.border}` }}>
           <h3 className="text-[15px] font-bold" style={{ fontFamily: "'Inter Tight', Inter, sans-serif" }}>{matchedTeacher.name}</h3>
           <p className="text-[12.5px] mt-1" style={{ color: c.inkMuted }}>
-            {matchedTeacher.dept} · {rangeLabel} — <strong style={{ color: STATUS_META.Absent.fg }}>Total Days Absent: {kpis.absentCount}</strong> · <strong style={{ color: STATUS_META.Late.fg }}>Total Times Late: {kpis.lateCount}</strong>
+            {matchedTeacher.dept} · {rangeLabel} — <strong style={{ color: STATUS_META.Absent.fg }}>Total Days Absent: {kpis.absentCount}</strong> · <strong style={{ color: STATUS_META.Late.fg }}>Total Times Late: {kpis.lateCount}</strong> · <strong style={{ color: STATUS_META.OD.fg }}>Total OD Days: {kpis.odCount}</strong>
           </p>
         </div>
       )}
 
       <div>
         <h2 className="text-[16px] font-bold mb-3" style={{ fontFamily: "'Inter Tight', Inter, sans-serif" }}>{scopeLabel} · {rangeLabel}</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
           <KpiCard c={c} label="Working days" value={kpis.workingDays} />
+          <KpiCard c={c} label="OD days" value={kpis.odCount} tone={STATUS_META.OD.fg} />
           <KpiCard c={c} label="Present %" value={`${kpis.presentPct}%`} tone={STATUS_META.Present.fg} />
           <KpiCard c={c} label="Late %" value={`${kpis.latePct}%`} tone={STATUS_META.Late.fg} />
           <KpiCard c={c} label="Absent %" value={`${kpis.absentPct}%`} tone={STATUS_META.Absent.fg} />
@@ -1667,7 +1682,7 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
           <div className="sm:ml-auto flex flex-wrap items-center gap-2">
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
               className="h-9 rounded-lg text-[12.5px] px-2.5 outline-none" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.ink }}>
-              {["All", "Present", "Late", "Absent", "Leave", "Holiday"].map((s) => <option key={s} value={s}>{s}</option>)}
+              {["All", "Present", "Late", "Absent", "OD", "Leave", "Holiday"].map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
         </div>
@@ -1693,8 +1708,8 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
                   <td className="px-4 py-3 whitespace-nowrap font-semibold">{r.teacher}</td>
                   <td className="px-4 py-3 whitespace-nowrap" style={{ color: c.inkMuted }}>{r.dept}</td>
                   <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkMuted }}>{minToLabel(r.deadline)}</td>
-                  <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkMuted }}>{minToLabel(r.punch)}</td>
-                  <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkFaint }}>{r.status === "Late" ? `+${r.delay}m` : "—"}</td>
+                  <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: r.status === "OD" ? STATUS_META.OD.fg : c.inkMuted }}>{r.status === "OD" ? "OD" : minToLabel(r.punch)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: r.status === "OD" ? STATUS_META.OD.fg : c.inkFaint }}>{r.status === "OD" ? "OD" : r.status === "Late" ? `+${r.delay}m` : "—"}</td>
                   <td className="px-4 py-3 whitespace-nowrap"><Badge status={r.status} /></td>
                 </tr>
               ))}
