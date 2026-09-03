@@ -89,7 +89,39 @@ function dateLabel(d) {
 function pad2(n) { return String(n).padStart(2, "0"); }
 function dayKey(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
 function slugify(s) { return String(s).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }
-function deadlineForHour(hour) { return hour === 1 ? 7 * 60 + 55 : hour === 2 ? 8 * 60 + 40 : 9 * 60; }
+const SETTINGS_KEY = "ff_settings";
+const DEFAULT_SETTINGS = {
+  workingDays: { Mon: true, Tue: true, Wed: true, Thu: true, Fri: true, Sat: false, Sun: false },
+  holidays: [],
+  deadlines: { hour1: "07:55", hour2: "08:40", fallback: "09:00" },
+  imports: { dedupe: true, skipBlank: true, earliest: true, caseInsensitive: true },
+  exportFmt: "Excel",
+};
+function loadSettings() {
+  if (typeof window === "undefined") return DEFAULT_SETTINGS;
+  try {
+    const s = JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || "{}");
+    return {
+      ...DEFAULT_SETTINGS, ...s,
+      workingDays: { ...DEFAULT_SETTINGS.workingDays, ...(s.workingDays || {}) },
+      deadlines: { ...DEFAULT_SETTINGS.deadlines, ...(s.deadlines || {}) },
+      imports: { ...DEFAULT_SETTINGS.imports, ...(s.imports || {}) },
+      holidays: Array.isArray(s.holidays) ? s.holidays : [],
+    };
+  } catch { return DEFAULT_SETTINGS; }
+}
+function saveSettings(next) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+    window.dispatchEvent(new CustomEvent("ff-settings"));
+  } catch { /* quota */ }
+}
+function isHolidayKey(key, settings) { return (settings?.holidays || []).some((h) => h.date === key); }
+function deadlineForHour(hour, settings) {
+  const d = (settings || DEFAULT_SETTINGS).deadlines || DEFAULT_SETTINGS.deadlines;
+  return hour === 1 ? toMin(d.hour1) : hour === 2 ? toMin(d.hour2) : toMin(d.fallback);
+}
 function hourLabel(hour) { return hour == null ? "—" : hour === 1 ? "1st hr · 8:00 AM" : hour === 2 ? "2nd hr · 8:50 AM" : `Hour ${hour}`; }
 
 function loadState() {
