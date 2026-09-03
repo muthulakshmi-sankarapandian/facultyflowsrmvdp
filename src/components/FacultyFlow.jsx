@@ -521,8 +521,19 @@ export default function FacultyFlowApp() {
     return () => clearTimeout(t);
   }, [watchConnected, pushToast]);
 
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  useEffect(() => {
+    setSettings(loadSettings());
+    const fn = () => setSettings(loadSettings());
+    window.addEventListener("ff-settings", fn);
+    return () => window.removeEventListener("ff-settings", fn);
+  }, []);
+  const updateSettings = useCallback((patch) => {
+    setSettings((prev) => { const next = typeof patch === "function" ? patch(prev) : { ...prev, ...patch }; saveSettings(next); return next; });
+  }, []);
+
   const nowMin = clock.getHours() * 60 + clock.getMinutes();
-  const todayRecords = useMemo(() => buildRecords(tt, punchMap, clock, nowMin), [tt, punchMap, nowMin]);
+  const todayRecords = useMemo(() => buildRecords(tt, punchMap, clock, nowMin, settings), [tt, punchMap, nowMin, settings]);
   const teachers = tt ? tt.teachers : [];
 
   useEffect(() => {
