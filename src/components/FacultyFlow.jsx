@@ -1711,14 +1711,23 @@ function ChartCard({ c, title, children }) {
 
 /* --------------------------------- SETTINGS ------------------------------------ */
 
-function SettingsPage({ c, themeMode, setThemeMode, pushToast }) {
-  const [workingDays, setWorkingDays] = useState({ Mon: true, Tue: true, Wed: true, Thu: true, Fri: true, Sat: false, Sun: false });
-  const [holidays, setHolidays] = useState([
-    { date: "15 Aug 2026", name: "Independence Day" },
-    { date: "02 Oct 2026", name: "Gandhi Jayanti" },
-    { date: "12 Nov 2026", name: "Diwali" },
-  ]);
-  const [exportFmt, setExportFmt] = useState("Excel");
+function SettingsPage({ c, themeMode, setThemeMode, pushToast, settings, updateSettings }) {
+  const s = settings || DEFAULT_SETTINGS;
+  const workingDays = s.workingDays, holidays = s.holidays, exportFmt = s.exportFmt;
+  const [newHoliday, setNewHoliday] = useState({ date: "", name: "" });
+  const IMPORT_LABELS = [["dedupe", "Ignore duplicate punches"], ["skipBlank", "Ignore blank rows"], ["earliest", "Use earliest punch of the day"], ["caseInsensitive", "Case-insensitive teacher matching"]];
+  const addHoliday = () => {
+    if (!newHoliday.date) { pushToast("Pick a date", "Choose the date you want to block.", "error"); return; }
+    if (holidays.some((h) => h.date === newHoliday.date)) { pushToast("Already blocked", "That date is already in the holiday calendar.", "info"); return; }
+    updateSettings((p) => ({ ...p, holidays: [...p.holidays, { date: newHoliday.date, name: newHoliday.name.trim() || "Holiday" }].sort((a, b) => a.date.localeCompare(b.date)) }));
+    setNewHoliday({ date: "", name: "" });
+    pushToast("Holiday saved", "Attendance for that date is now excluded.", "success");
+  };
+  const removeHoliday = (date) => {
+    updateSettings((p) => ({ ...p, holidays: p.holidays.filter((h) => h.date !== date) }));
+    pushToast("Holiday removed", "That date counts as a working day again.", "info");
+  };
+
 
   const Section = ({ title, icon: Icon, children, desc }) => (
     <div className="rounded-2xl p-5" style={{ background: c.surface, border: `1px solid ${c.border}` }}>
