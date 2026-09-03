@@ -1067,13 +1067,56 @@ async function exportXLSX(rows, filename, sheetName = "Report") {
 
 async function exportPDF(rows, filename, title) {
   const { jsPDF } = await import("jspdf");
-  const autoTable = (await import("jspdf-autotable")).default;
-  const doc = new jsPDF({ orientation: "landscape" });
+  const mod = await import("jspdf-autotable");
+  const autoTable = mod.autoTable || mod.default;
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  const pageW = doc.internal.pageSize.getWidth();
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(15);
+  doc.setTextColor(27, 33, 28);
+  doc.text("Faculty Flow — Attendance Report", 14, 14);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(91, 100, 89);
+  doc.text(title, 14, 20);
+  doc.text(`Generated: ${new Date().toLocaleString("en-IN")}`, pageW - 14, 14, { align: "right" });
+  const counts = { Present: 0, Late: 0, Absent: 0, OD: 0, Waiting: 0, Leave: 0, Holiday: 0 };
+  rows.forEach((r) => { if (counts[r.Status] != null) counts[r.Status]++; });
+  const summary = [`Total: ${rows.length}`, `Present: ${counts.Present}`, `Late: ${counts.Late}`, `Absent: ${counts.Absent}`, `OD: ${counts.OD}`];
+  if (counts.Waiting) summary.push(`Waiting: ${counts.Waiting}`);
+  if (counts.Leave) summary.push(`Leave: ${counts.Leave}`);
+  if (counts.Holiday) summary.push(`Holiday: ${counts.Holiday}`);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.5);
+  doc.setTextColor(14, 124, 74);
+  doc.text(summary.join("   ·   "), 14, 27);
   const head = [Object.keys(rows[0] || { Info: "" })];
   const body = rows.map((r) => Object.values(r).map((v) => (v == null ? "" : String(v))));
-  doc.setFontSize(13);
-  doc.text(title, 14, 14);
-  autoTable(doc, { head, body, startY: 20, styles: { fontSize: 8 }, headStyles: { fillColor: [14, 124, 74] } });
+  autoTable(doc, {
+    head, body, startY: 31,
+    styles: { fontSize: 8.5, cellPadding: 2, textColor: [27, 33, 28] },
+    headStyles: { fillColor: [14, 124, 74], textColor: [255, 255, 255], fontStyle: "bold" },
+    alternateRowStyles: { fillColor: [246, 247, 245] },
+    margin: { left: 14, right: 14 },
+    didParseCell: (d) => {
+      if (d.section === "body" && head[0][d.column.index] === "Status") {
+        const s = d.cell.raw;
+        if (s === "Absent") d.cell.styles.textColor = [180, 35, 42];
+        else if (s === "Late") d.cell.styles.textColor = [178, 90, 0];
+        else if (s === "Present") d.cell.styles.textColor = [14, 124, 74];
+        else if (s === "OD") d.cell.styles.textColor = [15, 118, 110];
+        d.cell.styles.fontStyle = "bold";
+      }
+    },
+  });
+  const pages = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= pages; i++) {
+    doc.setPage(i);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(139, 146, 133);
+    doc.text(`Page ${i} of ${pages}`, pageW - 14, doc.internal.pageSize.getHeight() - 8, { align: "right" });
+  }
   doc.save(filename);
 }
 
