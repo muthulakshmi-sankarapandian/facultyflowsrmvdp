@@ -1566,7 +1566,7 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
             className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: c.brand, color: "#fff" }}>
             <FileSpreadsheet size={13} /> Excel
           </button>
-          <button onClick={async () => { await exportPDF(exportRows(), `${fileBase}.pdf`, `${scopeLabel} · ${rangeLabel}`); pushToast("PDF exported", `${scopeLabel} · ${rangeLabel}`, "success"); }}
+          <button onClick={async () => { try { const rows = exportRows(); if (!rows.length) { pushToast("Nothing to export", "No records in the current view.", "error"); return; } await exportPDF(rows, `${fileBase}.pdf`, `${scopeLabel} · ${rangeLabel}`); pushToast("PDF exported", `${scopeLabel} · ${rangeLabel}`, "success"); } catch (err) { pushToast("PDF export failed", String(err?.message || err), "error"); } }}
             className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.inkMuted }}>
             <Download size={13} /> PDF
           </button>
