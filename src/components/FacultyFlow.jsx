@@ -292,6 +292,29 @@ function pickEntry(entries, tests) {
   for (const re of tests) { const e = entries.find(([k]) => re.test(String(k))); if (e) return e; }
   return null;
 }
+function punchToMin(raw) {
+  if (raw == null || raw === "") return null;
+  if (raw instanceof Date && !isNaN(raw)) {
+    const m = raw.getHours() * 60 + raw.getMinutes();
+    const u = raw.getUTCHours() * 60 + raw.getUTCMinutes();
+    if (raw.getFullYear() <= 1900) return u >= 240 && u <= 1320 && (m < 240 || m > 1320) ? u : m;
+    return m;
+  }
+  if (typeof raw === "number" && isFinite(raw)) {
+    const frac = raw >= 1 ? raw - Math.floor(raw) : raw;
+    return Math.round(frac * 1440);
+  }
+  const s = String(raw).trim();
+  const m = s.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AaPp][Mm])?/);
+  if (!m) return null;
+  let h = Number(m[1]);
+  const mm = Number(m[2]);
+  const ap = (m[4] || "").toLowerCase();
+  if (ap === "pm" && h < 12) h += 12;
+  if (ap === "am" && h === 12) h = 0;
+  if (h > 23 || mm > 59) return null;
+  return h * 60 + mm;
+}
 function punchRowsToMap(rows, teachers) {
   const map = {};
   rows.forEach((row) => {
@@ -299,20 +322,15 @@ function punchRowsToMap(rows, teachers) {
     const nameEntry = pickEntry(entries, [/faculty\s*name/i, /(teacher|staff|employee)\s*name/i, /^name$/i, /name/i]);
     const timeEntry = pickEntry(entries, [/first\s*in/i, /in\s*time/i, /punch/i, /\bin\b/i, /time/i]);
     if (!nameEntry || !timeEntry) return;
-    const raw = timeEntry[1];
-    if (raw == null || raw === "") return;
-    const match = raw instanceof Date && !isNaN(raw)
-      ? [null, String(raw.getUTCHours()), String(raw.getUTCMinutes())]
-      : String(raw).match(/(\d{1,2}):(\d{2})/);
-    if (!match) return;
+    const min = punchToMin(timeEntry[1]);
+    if (min == null || min <= 0) return;
     const t = fuzzyFindTeacher(teachers, nameEntry[1]);
     if (!t) return;
-    const min = Number(match[1]) * 60 + Number(match[2]);
-    if (!min) return;
     if (map[t.id] == null || min < map[t.id]) map[t.id] = min;
   });
   return map;
 }
+
 
 
 async function parsePunchFile(file, teachers) {
@@ -1733,7 +1751,7 @@ function SettingsPage({ c, themeMode, setThemeMode, pushToast, settings, updateS
   };
 
 
-  const Section = ({ title, icon: Icon, children, desc }) => (
+  const Section = useMemo(() => ({ title, icon: Icon, children, desc }) => (
     <div className="rounded-2xl p-5" style={{ background: c.surface, border: `1px solid ${c.border}` }}>
       <div className="flex items-center gap-2.5 mb-1">
         <div className="h-8 w-8 rounded-lg flex items-center justify-center" style={{ background: c.brandSoft }}><Icon size={15} style={{ color: c.brand }} /></div>
@@ -1742,7 +1760,7 @@ function SettingsPage({ c, themeMode, setThemeMode, pushToast, settings, updateS
       {desc && <p className="text-[11.5px] mb-4 ml-[42px]" style={{ color: c.inkFaint }}>{desc}</p>}
       <div className={desc ? "ml-[42px]" : ""}>{children}</div>
     </div>
-  );
+  ), [c]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 max-w-5xl">
