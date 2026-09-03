@@ -381,16 +381,18 @@ function mergeHistoryDay(key, records) {
   return records.length;
 }
 
-function buildRecords(tt, punchMap, date, nowMin) {
+function buildRecords(tt, punchMap, date, nowMin, settings) {
   if (!tt || !punchMap) return [];
+  const st = settings || loadSettings();
   const wd = DAY_KEYS[date.getDay()];
+  const blocked = isHolidayKey(dayKey(date), st) || st.workingDays?.[wd] === false;
   return tt.teachers
     .filter((t) => tt.timetable[t.id] && tt.timetable[t.id][wd] != null)
     .map((t) => {
       const hour = tt.timetable[t.id][wd];
-      const deadline = deadlineForHour(hour);
+      const deadline = deadlineForHour(hour, st);
       const punch = punchMap[t.id] == null ? null : punchMap[t.id];
-      const status = punch != null ? (punch <= deadline ? "Present" : "Late") : nowMin >= deadline ? "Absent" : "Waiting";
+      const status = blocked ? "Holiday" : punch != null ? (punch <= deadline ? "Present" : "Late") : nowMin >= deadline ? "Absent" : "Waiting";
       return {
         id: t.id, name: t.name, dept: t.dept, subject: (tt.subjects[t.id] || {})[wd] || "—",
         hour, firstClass: hour, deadline, punch, status,
