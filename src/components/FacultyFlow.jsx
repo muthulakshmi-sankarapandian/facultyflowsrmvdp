@@ -1745,7 +1745,7 @@ function SettingsPage({ c, themeMode, setThemeMode, pushToast, settings, updateS
       <Section title="Working days" icon={CalendarIcon} desc="Days the institution holds classes.">
         <div className="flex flex-wrap gap-2">
           {Object.keys(workingDays).map((d) => (
-            <button key={d} onClick={() => setWorkingDays((w) => ({ ...w, [d]: !w[d] }))}
+            <button key={d} onClick={() => updateSettings((p) => ({ ...p, workingDays: { ...p.workingDays, [d]: !p.workingDays[d] } }))}
               className="px-3 py-1.5 rounded-lg text-[12px] font-semibold"
               style={{ background: workingDays[d] ? c.brandSoft : c.surfaceAlt, color: workingDays[d] ? c.brand : c.inkFaint, border: `1px solid ${workingDays[d] ? c.brand + "33" : c.border}` }}>
               {d}
@@ -1754,23 +1754,43 @@ function SettingsPage({ c, themeMode, setThemeMode, pushToast, settings, updateS
         </div>
       </Section>
 
-      <Section title="Holiday calendar" icon={Coffee} desc="Dates with no classes are automatically excluded from reporting.">
+      <Section title="Holiday calendar" icon={Coffee} desc="Blocked dates are saved instantly and greyed out in attendance calculations.">
         <div className="space-y-1.5">
-          {holidays.map((h, i) => (
-            <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: c.surfaceAlt }}>
-              <span className="text-[12px] font-medium">{h.name}</span>
-              <span className="text-[11.5px] ff-mono" style={{ color: c.inkFaint }}>{h.date}</span>
+          {holidays.length === 0 && <div className="text-[12px]" style={{ color: c.inkFaint }}>No blocked dates yet.</div>}
+          {holidays.map((h) => (
+            <div key={h.date} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg" style={{ background: c.surfaceAlt }}>
+              <span className="text-[12px] font-medium truncate">{h.name}</span>
+              <span className="flex items-center gap-2">
+                <span className="text-[11.5px] ff-mono" style={{ color: c.inkFaint }}>{fromDateInput(h.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</span>
+                <button onClick={() => removeHoliday(h.date)} title="Remove" style={{ color: STATUS_META.Absent.fg }}><Trash2 size={13} /></button>
+              </span>
             </div>
           ))}
         </div>
-        <button onClick={() => pushToast("Holiday added", "Remember to save the calendar to apply it.", "info")}
-          className="mt-3 text-[12px] font-semibold px-3 py-1.5 rounded-lg" style={{ background: c.brandSoft, color: c.brand }}>+ Add holiday</button>
+        <div className="flex flex-wrap items-center gap-2 mt-3">
+          <input type="date" value={newHoliday.date} onChange={(e) => setNewHoliday((p) => ({ ...p, date: e.target.value }))}
+            className="h-9 px-2.5 rounded-lg text-[12px] outline-none" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.ink }} />
+          <input value={newHoliday.name} placeholder="Reason (optional)" onChange={(e) => setNewHoliday((p) => ({ ...p, name: e.target.value }))}
+            className="h-9 px-2.5 rounded-lg text-[12px] outline-none flex-1 min-w-[140px]" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.ink }} />
+          <button onClick={addHoliday} className="h-9 text-[12px] font-semibold px-3 rounded-lg" style={{ background: c.brand, color: "#fff" }}>+ Add holiday</button>
+        </div>
       </Section>
 
-      <Section title="Import settings" icon={Upload} desc="How Faculty Flow reconciles imported records.">
+      <Section title="Import settings" icon={Upload} desc="Preferences and deadline rules are saved and restored on reload.">
         <div className="space-y-2 text-[12.5px]" style={{ color: c.inkMuted }}>
-          {["Ignore duplicate punches", "Ignore blank rows", "Use earliest punch of the day", "Case-insensitive teacher matching"].map((s) => (
-            <label key={s} className="flex items-center gap-2"><input type="checkbox" defaultChecked /> {s}</label>
+          {IMPORT_LABELS.map(([k, label]) => (
+            <label key={k} className="flex items-center gap-2">
+              <input type="checkbox" checked={!!s.imports[k]} onChange={(e) => updateSettings((p) => ({ ...p, imports: { ...p.imports, [k]: e.target.checked } }))} /> {label}
+            </label>
+          ))}
+        </div>
+        <div className="grid grid-cols-3 gap-2 mt-3">
+          {[["hour1", "1st hour"], ["hour2", "2nd hour"], ["fallback", "Fallback"]].map(([k, label]) => (
+            <div key={k}>
+              <div className="text-[10.5px] font-bold uppercase tracking-wide mb-1" style={{ color: c.inkFaint }}>{label}</div>
+              <input type="time" value={s.deadlines[k]} onChange={(e) => updateSettings((p) => ({ ...p, deadlines: { ...p.deadlines, [k]: e.target.value } }))}
+                className="w-full h-9 px-2 rounded-lg text-[12px] outline-none" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.ink }} />
+            </div>
           ))}
         </div>
       </Section>
@@ -1778,11 +1798,12 @@ function SettingsPage({ c, themeMode, setThemeMode, pushToast, settings, updateS
       <Section title="Export preferences" icon={FileSpreadsheet} desc="Default format for downloaded reports.">
         <div className="flex gap-2">
           {["Excel", "CSV", "PDF"].map((f) => (
-            <button key={f} onClick={() => setExportFmt(f)} className="px-3 py-1.5 rounded-lg text-[12px] font-semibold"
+            <button key={f} onClick={() => updateSettings({ exportFmt: f })} className="px-3 py-1.5 rounded-lg text-[12px] font-semibold"
               style={{ background: exportFmt === f ? c.brand : c.surfaceAlt, color: exportFmt === f ? "#fff" : c.inkMuted }}>{f}</button>
           ))}
         </div>
       </Section>
+
 
       <Section title="Theme" icon={Sun}>
         <div className="flex gap-2">
