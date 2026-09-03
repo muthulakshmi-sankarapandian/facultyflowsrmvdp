@@ -1751,7 +1751,7 @@ function SettingsPage({ c, themeMode, setThemeMode, pushToast, settings, updateS
   };
 
 
-  const Section = ({ title, icon: Icon, children, desc }) => (
+  const Section = useMemo(() => ({ title, icon: Icon, children, desc }) => (
     <div className="rounded-2xl p-5" style={{ background: c.surface, border: `1px solid ${c.border}` }}>
       <div className="flex items-center gap-2.5 mb-1">
         <div className="h-8 w-8 rounded-lg flex items-center justify-center" style={{ background: c.brandSoft }}><Icon size={15} style={{ color: c.brand }} /></div>
@@ -1760,7 +1760,7 @@ function SettingsPage({ c, themeMode, setThemeMode, pushToast, settings, updateS
       {desc && <p className="text-[11.5px] mb-4 ml-[42px]" style={{ color: c.inkFaint }}>{desc}</p>}
       <div className={desc ? "ml-[42px]" : ""}>{children}</div>
     </div>
-  );
+  ), [c]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 max-w-5xl">
