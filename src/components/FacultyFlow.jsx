@@ -89,7 +89,39 @@ function dateLabel(d) {
 function pad2(n) { return String(n).padStart(2, "0"); }
 function dayKey(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
 function slugify(s) { return String(s).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }
-function deadlineForHour(hour) { return hour === 1 ? 7 * 60 + 55 : hour === 2 ? 8 * 60 + 40 : 9 * 60; }
+const SETTINGS_KEY = "ff_settings";
+const DEFAULT_SETTINGS = {
+  workingDays: { Mon: true, Tue: true, Wed: true, Thu: true, Fri: true, Sat: false, Sun: false },
+  holidays: [],
+  deadlines: { hour1: "07:55", hour2: "08:40", fallback: "09:00" },
+  imports: { dedupe: true, skipBlank: true, earliest: true, caseInsensitive: true },
+  exportFmt: "Excel",
+};
+function loadSettings() {
+  if (typeof window === "undefined") return DEFAULT_SETTINGS;
+  try {
+    const s = JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || "{}");
+    return {
+      ...DEFAULT_SETTINGS, ...s,
+      workingDays: { ...DEFAULT_SETTINGS.workingDays, ...(s.workingDays || {}) },
+      deadlines: { ...DEFAULT_SETTINGS.deadlines, ...(s.deadlines || {}) },
+      imports: { ...DEFAULT_SETTINGS.imports, ...(s.imports || {}) },
+      holidays: Array.isArray(s.holidays) ? s.holidays : [],
+    };
+  } catch { return DEFAULT_SETTINGS; }
+}
+function saveSettings(next) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+    window.dispatchEvent(new CustomEvent("ff-settings"));
+  } catch { /* quota */ }
+}
+function isHolidayKey(key, settings) { return (settings?.holidays || []).some((h) => h.date === key); }
+function deadlineForHour(hour, settings) {
+  const d = (settings || DEFAULT_SETTINGS).deadlines || DEFAULT_SETTINGS.deadlines;
+  return hour === 1 ? toMin(d.hour1) : hour === 2 ? toMin(d.hour2) : toMin(d.fallback);
+}
 function hourLabel(hour) { return hour == null ? "—" : hour === 1 ? "1st hr · 8:00 AM" : hour === 2 ? "2nd hr · 8:50 AM" : `Hour ${hour}`; }
 
 function loadState() {
@@ -349,16 +381,18 @@ function mergeHistoryDay(key, records) {
   return records.length;
 }
 
-function buildRecords(tt, punchMap, date, nowMin) {
+function buildRecords(tt, punchMap, date, nowMin, settings) {
   if (!tt || !punchMap) return [];
+  const st = settings || loadSettings();
   const wd = DAY_KEYS[date.getDay()];
+  const blocked = isHolidayKey(dayKey(date), st) || st.workingDays?.[wd] === false;
   return tt.teachers
     .filter((t) => tt.timetable[t.id] && tt.timetable[t.id][wd] != null)
     .map((t) => {
       const hour = tt.timetable[t.id][wd];
-      const deadline = deadlineForHour(hour);
+      const deadline = deadlineForHour(hour, st);
       const punch = punchMap[t.id] == null ? null : punchMap[t.id];
-      const status = punch != null ? (punch <= deadline ? "Present" : "Late") : nowMin >= deadline ? "Absent" : "Waiting";
+      const status = blocked ? "Holiday" : punch != null ? (punch <= deadline ? "Present" : "Late") : nowMin >= deadline ? "Absent" : "Waiting";
       return {
         id: t.id, name: t.name, dept: t.dept, subject: (tt.subjects[t.id] || {})[wd] || "—",
         hour, firstClass: hour, deadline, punch, status,
@@ -487,8 +521,23 @@ export default function FacultyFlowApp() {
     return () => clearTimeout(t);
   }, [watchConnected, pushToast]);
 
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  useEffect(() => {
+    setSettings(loadSettings());
+    const fn = () => setSettings(loadSettings());
+    window.addEventListener("ff-settings", fn);
+    return () => window.removeEventListener("ff-settings", fn);
+  }, []);
+  const updateSettings = useCallback((patch) => {
+    const prev = loadSettings();
+    const next = typeof patch === "function" ? patch(prev) : { ...prev, ...patch };
+    saveSettings(next);
+    setSettings(next);
+  }, []);
+
+
   const nowMin = clock.getHours() * 60 + clock.getMinutes();
-  const todayRecords = useMemo(() => buildRecords(tt, punchMap, clock, nowMin), [tt, punchMap, nowMin]);
+  const todayRecords = useMemo(() => buildRecords(tt, punchMap, clock, nowMin, settings), [tt, punchMap, nowMin, settings]);
   const teachers = tt ? tt.teachers : [];
 
   useEffect(() => {
@@ -573,12 +622,13 @@ export default function FacultyFlowApp() {
               )}
               {page === "history" && (
                 <motion.div key="hist" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}>
-                  <HistoryPage c={c} onOpenTeacher={setDrawerTeacher} pushToast={pushToast} teachers={teachers} refreshKey={historyKey} tt={tt} onRefresh={() => setHistoryKey((k) => k + 1)} />
+                  <HistoryPage c={c} onOpenTeacher={setDrawerTeacher} pushToast={pushToast} teachers={teachers} refreshKey={historyKey} tt={tt} settings={settings} onRefresh={() => setHistoryKey((k) => k + 1)} />
+
                 </motion.div>
               )}
               {page === "settings" && (
                 <motion.div key="set" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}>
-                  <SettingsPage c={c} themeMode={themeMode} setThemeMode={setThemeMode} pushToast={pushToast} />
+                  <SettingsPage c={c} themeMode={themeMode} setThemeMode={setThemeMode} pushToast={pushToast} settings={settings} updateSettings={updateSettings} />
                 </motion.div>
               )}
 
@@ -1272,73 +1322,45 @@ function StatMini({ c, label, value, tone }) {
 function toDateInput(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
 function fromDateInput(v) { const [y, m, d] = v.split("-").map(Number); return new Date(y, m - 1, d); }
 
-function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, tt, onRefresh }) {
+function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, tt, settings, onRefresh }) {
   const today = new Date();
   const [startDate, setStartDate] = useState(toDateInput(new Date(today.getFullYear(), today.getMonth(), 1)));
   const [endDate, setEndDate] = useState(toDateInput(today));
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
-  const [pendingPast, setPendingPast] = useState(null);
-  const [pendingDate, setPendingDate] = useState("");
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [pendingDate, setPendingDate] = useState(toDateInput(today));
   const [confirmFlush, setConfirmFlush] = useState(false);
   const pastInputRef = useRef(null);
 
-  const savePastSheet = useCallback((map, dateStr, fileName) => {
-    const d = fromDateInput(dateStr);
-    const recs = buildRecords(tt, map, d, 24 * 60);
-    if (!recs.length) { pushToast("No matching records", "None of the punches matched the active timetable for that weekday.", "error"); return false; }
-    mergeHistoryDay(dateStr, recs);
-    setStartDate((p) => (dateStr < p ? dateStr : p));
-    setEndDate((p) => (!p || dateStr > p ? dateStr : p));
-    onRefresh?.();
-    pushToast("Past sheet saved", `${recs.length} records for ${d.toLocaleDateString("en-IN")} added to History from ${fileName}.`, "success");
-    return true;
-  }, [tt, pushToast, onRefresh]);
-
+  const openUpload = useCallback(() => {
+    if (!tt) { pushToast("Upload a timetable first", "Past punches are verified against the active timetable.", "error"); return; }
+    setPendingDate(toDateInput(new Date()));
+    setUploadOpen(true);
+  }, [tt, pushToast]);
 
   const handlePastUpload = useCallback(async (e) => {
     const f = e.target.files?.[0];
     e.target.value = "";
-    if (!f) return;
-    if (!tt) { pushToast("Upload a timetable first", "Past punches are verified against the active timetable.", "error"); return; }
+    if (!f || !tt || !pendingDate) return;
     try {
       const sheets = await parsePastPunchFile(f, tt.teachers);
-      if (!sheets.length) { pushToast("No punches matched", "No teacher names from the file matched the active timetable.", "error"); return; }
-      const dated = sheets.filter((s) => s.date);
-      const undated = sheets.filter((s) => !s.date);
-      let saved = 0, days = 0;
-      dated.forEach((s) => {
-        const d = s.date;
-        const recs = buildRecords(tt, s.map, d, 24 * 60);
-        if (!recs.length) return;
-        mergeHistoryDay(dayKey(d), recs);
-        saved += recs.length; days++;
-      });
-      if (saved) {
-        const keys = dated.map((s) => toDateInput(s.date)).sort();
-        setStartDate((p) => (keys[0] < p ? keys[0] : p));
-        setEndDate((p) => (!p || keys[keys.length - 1] > p ? keys[keys.length - 1] : p));
-        onRefresh?.();
-        pushToast("Past sheet saved", `${saved} records across ${days} day${days > 1 ? "s" : ""} added to History from ${f.name}.`, "success");
-      }
-
-      if (undated.length) {
-        const map = {};
-        undated.forEach((s) => Object.entries(s.map).forEach(([k, v]) => { if (map[k] == null || v < map[k]) map[k] = v; }));
-        setPendingPast({ map, name: f.name });
-        setPendingDate("");
-      } else if (!saved) {
-        pushToast("No matching records", "None of the punches matched the active timetable for those weekdays.", "error");
-      }
+      const map = {};
+      sheets.forEach((s) => Object.entries(s.map).forEach(([k, v]) => { if (map[k] == null || v < map[k]) map[k] = v; }));
+      if (!Object.keys(map).length) { pushToast("No punches matched", "No teacher names from the file matched the active timetable.", "error"); return; }
+      const d = fromDateInput(pendingDate);
+      const recs = buildRecords(tt, map, d, 24 * 60, settings);
+      if (!recs.length) { pushToast("No matching records", "No faculty are scheduled on that weekday in the active timetable.", "error"); return; }
+      mergeHistoryDay(pendingDate, recs);
+      setStartDate((p) => (pendingDate < p ? pendingDate : p));
+      setEndDate((p) => (!p || pendingDate > p ? pendingDate : p));
+      setUploadOpen(false);
+      onRefresh?.();
+      pushToast("Past sheet saved", `${recs.length} records for ${d.toLocaleDateString("en-IN")} added to History from ${f.name}.`, "success");
     } catch {
       pushToast("Could not read punch sheet", "Expected columns for teacher name and punch time.", "error");
     }
-  }, [tt, pushToast, onRefresh]);
-
-  const confirmPendingDate = useCallback(() => {
-    if (!pendingPast || !pendingDate) return;
-    if (savePastSheet(pendingPast.map, pendingDate, pendingPast.name)) setPendingPast(null);
-  }, [pendingPast, pendingDate, savePastSheet]);
+  }, [tt, pendingDate, settings, pushToast, onRefresh]);
 
   const flushHistory = useCallback(() => {
     writeHistoryStore({});
@@ -1474,10 +1496,9 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
             <Download size={13} /> PDF
           </button>
           <input ref={pastInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handlePastUpload} />
-          <button onClick={() => pastInputRef.current?.click()}
+          <button onClick={openUpload}
             className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: c.brandLight, border: `1px solid ${c.brand}55`, color: c.brand }}>
             <CalendarPlus size={13} /> Upload Past Punch Sheet
-
           </button>
           <button onClick={() => setConfirmFlush(true)}
             className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: STATUS_META.Absent.bg, border: `1px solid ${STATUS_META.Absent.fg}44`, color: STATUS_META.Absent.fg }}>
@@ -1486,25 +1507,35 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
         </div>
       </div>
 
-      {pendingPast && (
-        <div className="rounded-2xl p-4 flex flex-col sm:flex-row sm:items-end gap-3" style={{ background: c.surface, border: `1px solid ${c.brand}55` }}>
-          <div className="flex-1">
-            <div className="text-[13px] font-bold">No date found in "{pendingPast.name}"</div>
-            <div className="text-[12px] mt-0.5" style={{ color: c.inkMuted }}>Pick the date this punch sheet belongs to. {Object.keys(pendingPast.map).length} punches matched the active timetable.</div>
-          </div>
-          <div>
-            <div className="text-[11px] font-bold uppercase tracking-wide mb-1.5" style={{ color: c.inkFaint }}>Sheet date</div>
-            <input type="date" value={pendingDate} max={toDateInput(new Date())} onChange={(e) => setPendingDate(e.target.value)}
-              className="h-9 px-2.5 rounded-lg text-[12.5px] outline-none" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.ink }} />
-          </div>
-          <div className="flex gap-2">
-            <button onClick={confirmPendingDate} disabled={!pendingDate}
-              className="h-9 px-3 rounded-lg text-[12.5px] font-semibold disabled:opacity-50" style={{ background: c.brand, color: "#fff" }}>Save to history</button>
-            <button onClick={() => setPendingPast(null)}
-              className="h-9 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.inkMuted }}>Cancel</button>
-          </div>
-        </div>
-      )}
+      <AnimatePresence>
+        {uploadOpen && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.45)" }}
+            onClick={() => setUploadOpen(false)}>
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+              className="rounded-2xl p-5 max-w-sm w-full" style={{ background: c.surface, border: `1px solid ${c.border}` }}
+              onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-2.5 mb-2">
+                <span className="h-9 w-9 rounded-xl inline-flex items-center justify-center" style={{ background: c.brandSoft, color: c.brand }}><CalendarPlus size={16} /></span>
+                <h3 className="text-[15px] font-bold">Upload past punch sheet</h3>
+              </div>
+              <p className="text-[12.5px] leading-relaxed" style={{ color: c.inkMuted }}>Pick the date this punch sheet belongs to, then choose the file. Records are matched to the active timetable and saved to History only.</p>
+              <div className="mt-3">
+                <div className="text-[11px] font-bold uppercase tracking-wide mb-1.5" style={{ color: c.inkFaint }}>Sheet date</div>
+                <input type="date" value={pendingDate} max={toDateInput(new Date())} onChange={(e) => setPendingDate(e.target.value)}
+                  className="w-full h-9 px-2.5 rounded-lg text-[12.5px] outline-none" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.ink }} />
+              </div>
+              <div className="flex justify-end gap-2 mt-4">
+                <button onClick={() => setUploadOpen(false)}
+                  className="h-9 px-3 rounded-lg text-[12.5px] font-semibold" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.inkMuted }}>Cancel</button>
+                <button onClick={() => pastInputRef.current?.click()} disabled={!pendingDate}
+                  className="h-9 px-3 rounded-lg text-[12.5px] font-semibold disabled:opacity-50" style={{ background: c.brand, color: "#fff" }}>Choose file & import</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
 
       <AnimatePresence>
         {confirmFlush && (
@@ -1684,14 +1715,23 @@ function ChartCard({ c, title, children }) {
 
 /* --------------------------------- SETTINGS ------------------------------------ */
 
-function SettingsPage({ c, themeMode, setThemeMode, pushToast }) {
-  const [workingDays, setWorkingDays] = useState({ Mon: true, Tue: true, Wed: true, Thu: true, Fri: true, Sat: false, Sun: false });
-  const [holidays, setHolidays] = useState([
-    { date: "15 Aug 2026", name: "Independence Day" },
-    { date: "02 Oct 2026", name: "Gandhi Jayanti" },
-    { date: "12 Nov 2026", name: "Diwali" },
-  ]);
-  const [exportFmt, setExportFmt] = useState("Excel");
+function SettingsPage({ c, themeMode, setThemeMode, pushToast, settings, updateSettings }) {
+  const s = settings || DEFAULT_SETTINGS;
+  const workingDays = s.workingDays, holidays = s.holidays, exportFmt = s.exportFmt;
+  const [newHoliday, setNewHoliday] = useState({ date: "", name: "" });
+  const IMPORT_LABELS = [["dedupe", "Ignore duplicate punches"], ["skipBlank", "Ignore blank rows"], ["earliest", "Use earliest punch of the day"], ["caseInsensitive", "Case-insensitive teacher matching"]];
+  const addHoliday = () => {
+    if (!newHoliday.date) { pushToast("Pick a date", "Choose the date you want to block.", "error"); return; }
+    if (holidays.some((h) => h.date === newHoliday.date)) { pushToast("Already blocked", "That date is already in the holiday calendar.", "info"); return; }
+    updateSettings((p) => ({ ...p, holidays: [...p.holidays, { date: newHoliday.date, name: newHoliday.name.trim() || "Holiday" }].sort((a, b) => a.date.localeCompare(b.date)) }));
+    setNewHoliday({ date: "", name: "" });
+    pushToast("Holiday saved", "Attendance for that date is now excluded.", "success");
+  };
+  const removeHoliday = (date) => {
+    updateSettings((p) => ({ ...p, holidays: p.holidays.filter((h) => h.date !== date) }));
+    pushToast("Holiday removed", "That date counts as a working day again.", "info");
+  };
+
 
   const Section = ({ title, icon: Icon, children, desc }) => (
     <div className="rounded-2xl p-5" style={{ background: c.surface, border: `1px solid ${c.border}` }}>
@@ -1709,7 +1749,7 @@ function SettingsPage({ c, themeMode, setThemeMode, pushToast }) {
       <Section title="Working days" icon={CalendarIcon} desc="Days the institution holds classes.">
         <div className="flex flex-wrap gap-2">
           {Object.keys(workingDays).map((d) => (
-            <button key={d} onClick={() => setWorkingDays((w) => ({ ...w, [d]: !w[d] }))}
+            <button key={d} onClick={() => updateSettings((p) => ({ ...p, workingDays: { ...p.workingDays, [d]: !p.workingDays[d] } }))}
               className="px-3 py-1.5 rounded-lg text-[12px] font-semibold"
               style={{ background: workingDays[d] ? c.brandSoft : c.surfaceAlt, color: workingDays[d] ? c.brand : c.inkFaint, border: `1px solid ${workingDays[d] ? c.brand + "33" : c.border}` }}>
               {d}
@@ -1718,23 +1758,43 @@ function SettingsPage({ c, themeMode, setThemeMode, pushToast }) {
         </div>
       </Section>
 
-      <Section title="Holiday calendar" icon={Coffee} desc="Dates with no classes are automatically excluded from reporting.">
+      <Section title="Holiday calendar" icon={Coffee} desc="Blocked dates are saved instantly and greyed out in attendance calculations.">
         <div className="space-y-1.5">
-          {holidays.map((h, i) => (
-            <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: c.surfaceAlt }}>
-              <span className="text-[12px] font-medium">{h.name}</span>
-              <span className="text-[11.5px] ff-mono" style={{ color: c.inkFaint }}>{h.date}</span>
+          {holidays.length === 0 && <div className="text-[12px]" style={{ color: c.inkFaint }}>No blocked dates yet.</div>}
+          {holidays.map((h) => (
+            <div key={h.date} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg" style={{ background: c.surfaceAlt }}>
+              <span className="text-[12px] font-medium truncate">{h.name}</span>
+              <span className="flex items-center gap-2">
+                <span className="text-[11.5px] ff-mono" style={{ color: c.inkFaint }}>{fromDateInput(h.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</span>
+                <button onClick={() => removeHoliday(h.date)} title="Remove" style={{ color: STATUS_META.Absent.fg }}><Trash2 size={13} /></button>
+              </span>
             </div>
           ))}
         </div>
-        <button onClick={() => pushToast("Holiday added", "Remember to save the calendar to apply it.", "info")}
-          className="mt-3 text-[12px] font-semibold px-3 py-1.5 rounded-lg" style={{ background: c.brandSoft, color: c.brand }}>+ Add holiday</button>
+        <div className="flex flex-wrap items-center gap-2 mt-3">
+          <input type="date" value={newHoliday.date} onChange={(e) => setNewHoliday((p) => ({ ...p, date: e.target.value }))}
+            className="h-9 px-2.5 rounded-lg text-[12px] outline-none" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.ink }} />
+          <input value={newHoliday.name} placeholder="Reason (optional)" onChange={(e) => setNewHoliday((p) => ({ ...p, name: e.target.value }))}
+            className="h-9 px-2.5 rounded-lg text-[12px] outline-none flex-1 min-w-[140px]" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.ink }} />
+          <button onClick={addHoliday} className="h-9 text-[12px] font-semibold px-3 rounded-lg" style={{ background: c.brand, color: "#fff" }}>+ Add holiday</button>
+        </div>
       </Section>
 
-      <Section title="Import settings" icon={Upload} desc="How Faculty Flow reconciles imported records.">
+      <Section title="Import settings" icon={Upload} desc="Preferences and deadline rules are saved and restored on reload.">
         <div className="space-y-2 text-[12.5px]" style={{ color: c.inkMuted }}>
-          {["Ignore duplicate punches", "Ignore blank rows", "Use earliest punch of the day", "Case-insensitive teacher matching"].map((s) => (
-            <label key={s} className="flex items-center gap-2"><input type="checkbox" defaultChecked /> {s}</label>
+          {IMPORT_LABELS.map(([k, label]) => (
+            <label key={k} className="flex items-center gap-2">
+              <input type="checkbox" checked={!!s.imports[k]} onChange={(e) => updateSettings((p) => ({ ...p, imports: { ...p.imports, [k]: e.target.checked } }))} /> {label}
+            </label>
+          ))}
+        </div>
+        <div className="grid grid-cols-3 gap-2 mt-3">
+          {[["hour1", "1st hour"], ["hour2", "2nd hour"], ["fallback", "Fallback"]].map(([k, label]) => (
+            <div key={k}>
+              <div className="text-[10.5px] font-bold uppercase tracking-wide mb-1" style={{ color: c.inkFaint }}>{label}</div>
+              <input type="time" value={s.deadlines[k]} onChange={(e) => updateSettings((p) => ({ ...p, deadlines: { ...p.deadlines, [k]: e.target.value } }))}
+                className="w-full h-9 px-2 rounded-lg text-[12px] outline-none" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.ink }} />
+            </div>
           ))}
         </div>
       </Section>
@@ -1742,11 +1802,12 @@ function SettingsPage({ c, themeMode, setThemeMode, pushToast }) {
       <Section title="Export preferences" icon={FileSpreadsheet} desc="Default format for downloaded reports.">
         <div className="flex gap-2">
           {["Excel", "CSV", "PDF"].map((f) => (
-            <button key={f} onClick={() => setExportFmt(f)} className="px-3 py-1.5 rounded-lg text-[12px] font-semibold"
+            <button key={f} onClick={() => updateSettings({ exportFmt: f })} className="px-3 py-1.5 rounded-lg text-[12px] font-semibold"
               style={{ background: exportFmt === f ? c.brand : c.surfaceAlt, color: exportFmt === f ? "#fff" : c.inkMuted }}>{f}</button>
           ))}
         </div>
       </Section>
+
 
       <Section title="Theme" icon={Sun}>
         <div className="flex gap-2">
