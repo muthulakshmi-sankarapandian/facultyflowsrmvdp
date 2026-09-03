@@ -62,6 +62,7 @@ const STATUS_META = {
   Absent: { fg: "#B4232A", bg: "#FBE6E5", dot: "#D5333B" },
   Waiting: { fg: "#1D5DBF", bg: "#E4EEFC", dot: "#2E6FDB" },
   Leave: { fg: "#7A3FBF", bg: "#F0E6FC", dot: "#8A4FD0" },
+  OD: { fg: "#0F766E", bg: "#DDF4F1", dot: "#0D9488" },
   Holiday: { fg: "#5B6459", bg: "#EEF0EC", dot: "#8B9285" },
 };
 
@@ -321,12 +322,15 @@ function punchRowsToMap(rows, teachers) {
     const entries = Object.entries(row).filter(([k]) => k !== "__rowNum__");
     const nameEntry = pickEntry(entries, [/faculty\s*name/i, /(teacher|staff|employee)\s*name/i, /^name$/i, /name/i]);
     const timeEntry = pickEntry(entries, [/first\s*in/i, /in\s*time/i, /punch/i, /\bin\b/i, /time/i]);
-    if (!nameEntry || !timeEntry) return;
-    const min = punchToMin(timeEntry[1]);
-    if (min == null || min <= 0) return;
+    if (!nameEntry) return;
+    const typeEntry = pickEntry(entries, [/attendance\s*type/i, /\btype\b/i]);
+    const isOD = typeEntry && /on\s*field/i.test(String(typeEntry[1]));
+    const min = timeEntry ? punchToMin(timeEntry[1]) : null;
+    if (!isOD && (min == null || min <= 0)) return;
     const t = fuzzyFindTeacher(teachers, nameEntry[1]);
     if (!t) return;
-    if (map[t.id] == null || min < map[t.id]) map[t.id] = min;
+    if (isOD) { if (map[t.id] == null || map[t.id] === "OD") map[t.id] = "OD"; return; }
+    if (map[t.id] == null || map[t.id] === "OD" || min < map[t.id]) map[t.id] = min;
   });
   return map;
 }
@@ -409,8 +413,10 @@ function buildRecords(tt, punchMap, date, nowMin, settings) {
     .map((t) => {
       const hour = tt.timetable[t.id][wd];
       const deadline = deadlineForHour(hour, st);
-      const punch = punchMap[t.id] == null ? null : punchMap[t.id];
-      const status = blocked ? "Holiday" : punch != null ? (punch <= deadline ? "Present" : "Late") : nowMin >= deadline ? "Absent" : "Waiting";
+      const raw = punchMap[t.id];
+      const isOD = raw === "OD";
+      const punch = raw == null || isOD ? null : raw;
+      const status = blocked ? "Holiday" : isOD ? "OD" : punch != null ? (punch <= deadline ? "Present" : "Late") : nowMin >= deadline ? "Absent" : "Waiting";
       return {
         id: t.id, name: t.name, dept: t.dept, subject: (tt.subjects[t.id] || {})[wd] || "—",
         hour, firstClass: hour, deadline, punch, status,
@@ -425,17 +431,18 @@ function monthStats(teacherId, todayRecord) {
   if (todayRecord && !rows.some((r) => dayKey(r.date) === dayKey(now))) rows.push({ date: now, status: todayRecord.status, delay: todayRecord.delay });
   const working = rows.filter((r) => r.status !== "Holiday");
   const lateRows = rows.filter((r) => r.status === "Late");
-  const present = rows.filter((r) => r.status === "Present").length;
-  const absent = rows.filter((r) => r.status === "Absent").length;
-  const leave = rows.filter((r) => r.status === "Leave").length;
-  const totalLateMin = lateRows.reduce((a, b) => a + (b.delay || 0), 0);
-  return {
-    month: now.toLocaleDateString("en-IN", { month: "long", year: "numeric" }),
-    rows, lateRows,
-    workingDays: working.length,
-    late: lateRows.length,
-    present, absent, leave,
-    pct: working.length ? Math.round(((present + lateRows.length) / working.length) * 100) : 0,
+    const present = rows.filter((r) => r.status === "Present").length;
+    const absent = rows.filter((r) => r.status === "Absent").length;
+    const leave = rows.filter((r) => r.status === "Leave").length;
+    const od = rows.filter((r) => r.status === "OD").length;
+    const totalLateMin = lateRows.reduce((a, b) => a + (b.delay || 0), 0);
+    return {
+      month: now.toLocaleDateString("en-IN", { month: "long", year: "numeric" }),
+      rows, lateRows,
+      workingDays: working.length,
+      late: lateRows.length,
+      present, absent, leave, od,
+      pct: working.length ? Math.round(((present + lateRows.length + od) / working.length) * 100) : 0,
     avgLate: lateRows.length ? Math.round(totalLateMin / lateRows.length) : 0,
     totalLateMin,
   };
@@ -597,9 +604,9 @@ export default function FacultyFlowApp() {
   const summary = useMemo(() => {
     const scheduled = todayRecords.filter((r) => r.status !== "Holiday").length;
     const by = (s) => todayRecords.filter((r) => r.status === s).length;
-    const present = by("Present"), late = by("Late"), absent = by("Absent"), waiting = by("Waiting"), leave = by("Leave");
-    const pct = scheduled ? Math.round(((present + late) / scheduled) * 100) : 0;
-    return { scheduled, present, late, absent, waiting, leave, pct };
+    const present = by("Present"), late = by("Late"), absent = by("Absent"), waiting = by("Waiting"), leave = by("Leave"), od = by("OD");
+    const pct = scheduled ? Math.round(((present + late + od) / scheduled) * 100) : 0;
+    return { scheduled, present, late, absent, waiting, leave, od, pct };
   }, [todayRecords]);
 
 
@@ -833,10 +840,12 @@ function SummarySection({ c, summary }) {
     { label: "Present", value: summary.present, icon: CheckCircle2, tone: STATUS_META.Present.fg },
     { label: "Late", value: summary.late, icon: Clock, tone: STATUS_META.Late.fg },
     { label: "Absent", value: summary.absent, icon: XCircle, tone: STATUS_META.Absent.fg },
+    { label: "On Duty", value: summary.od, icon: Coffee, tone: STATUS_META.OD.fg },
     { label: "Waiting", value: summary.waiting, icon: Timer, tone: STATUS_META.Waiting.fg },
   ];
   const segs = [
     { label: "Present", v: summary.present, color: STATUS_META.Present.dot },
+    { label: "OD", v: summary.od, color: STATUS_META.OD.dot },
     { label: "Late", v: summary.late, color: STATUS_META.Late.dot },
     { label: "Absent", v: summary.absent, color: STATUS_META.Absent.dot },
     { label: "Waiting", v: summary.waiting, color: STATUS_META.Waiting.dot },
@@ -863,7 +872,7 @@ function SummarySection({ c, summary }) {
         ))}
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
         {cards.map((cd) => (
           <div key={cd.label} className="rounded-xl p-3.5" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}` }}>
             <div className="flex items-center gap-1.5 mb-2">
