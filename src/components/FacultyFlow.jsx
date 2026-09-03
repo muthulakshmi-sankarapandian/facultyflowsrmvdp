@@ -1325,7 +1325,7 @@ function TeacherDrawer({ c, teacherId, onClose, todayRecords, teachers = [] }) {
                   <StatMini c={c} label="Attendance" value={`${stats.pct}%`} tone={c.brand} />
                   <StatMini c={c} label="Late (30d)" value={stats.late} tone={STATUS_META.Late.fg} />
                   <StatMini c={c} label="Absent (30d)" value={stats.absent} tone={STATUS_META.Absent.fg} />
-                  <StatMini c={c} label="OD days (30d)" value={stats.od} tone={STATUS_META.OD.fg} />
+                  <StatMini c={c} label="No of on OD" value={stats.od} tone={STATUS_META.OD.fg} />
                   <StatMini c={c} label="OD this month" value={mStats.od} tone={STATUS_META.OD.fg} />
                   <StatMini c={c} label="Late this month" value={mStats.late} tone={STATUS_META.Late.fg} />
                 </div>
@@ -1648,7 +1648,7 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
         <div className="rounded-2xl p-5" style={{ background: c.surface, border: `1px solid ${c.border}` }}>
           <h3 className="text-[15px] font-bold" style={{ fontFamily: "'Inter Tight', Inter, sans-serif" }}>{matchedTeacher.name}</h3>
           <p className="text-[12.5px] mt-1" style={{ color: c.inkMuted }}>
-            {matchedTeacher.dept} · {rangeLabel} — <strong style={{ color: STATUS_META.Absent.fg }}>Total Days Absent: {kpis.absentCount}</strong> · <strong style={{ color: STATUS_META.Late.fg }}>Total Times Late: {kpis.lateCount}</strong> · <strong style={{ color: STATUS_META.OD.fg }}>Total OD Days: {kpis.odCount}</strong>
+            {matchedTeacher.dept} · {rangeLabel} — <strong style={{ color: STATUS_META.Absent.fg }}>Total Days Absent: {kpis.absentCount}</strong> · <strong style={{ color: STATUS_META.Late.fg }}>Total Times Late: {kpis.lateCount}</strong> · <strong style={{ color: STATUS_META.OD.fg }}>No of on OD: {kpis.odCount}</strong>
           </p>
         </div>
       )}
@@ -1657,8 +1657,8 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
         <h2 className="text-[16px] font-bold mb-3" style={{ fontFamily: "'Inter Tight', Inter, sans-serif" }}>{scopeLabel} · {rangeLabel}</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
           <KpiCard c={c} label="Working days" value={kpis.workingDays} />
-          <KpiCard c={c} label="OD days" value={kpis.odCount} tone={STATUS_META.OD.fg} />
-          <KpiCard c={c} label="Present %" value={`${kpis.presentPct}%`} tone={STATUS_META.Present.fg} />
+          <KpiCard c={c} label="No of on OD" value={kpis.odCount} tone={STATUS_META.OD.fg} />
+          <KpiCard c={c} label="On time %" value={`${kpis.presentPct}%`} tone={STATUS_META.Present.fg} />
           <KpiCard c={c} label="Late %" value={`${kpis.latePct}%`} tone={STATUS_META.Late.fg} />
           <KpiCard c={c} label="Absent %" value={`${kpis.absentPct}%`} tone={STATUS_META.Absent.fg} />
           <KpiCard c={c} label="Times late" value={kpis.lateCount} tone={STATUS_META.Late.fg} />
