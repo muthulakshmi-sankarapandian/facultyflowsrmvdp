@@ -1126,7 +1126,7 @@ function AttendanceTable({ c, records, onOpenTeacher, pushToast, clearPunchSheet
           </div>
           <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); }}
             className="h-9 rounded-lg text-[12.5px] px-2.5 outline-none" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.ink }}>
-            {["All", "Present", "Late", "Absent", "Waiting", "Leave", "Holiday"].map((s) => <option key={s} value={s}>{s}</option>)}
+            {["All", "Present", "Late", "Absent", "OD", "Waiting", "Leave", "Holiday"].map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
           <div className="relative">
             <button onClick={() => setColMenuOpen((o) => !o)} className="h-9 w-9 inline-flex items-center justify-center rounded-lg"
@@ -1185,8 +1185,8 @@ function AttendanceTable({ c, records, onOpenTeacher, pushToast, clearPunchSheet
                 {col("subject") && <td className="px-4 py-3 whitespace-nowrap" style={{ color: c.inkMuted }}>{r.subject}</td>}
                 {col("firstClass") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkMuted }}>{hourLabel(r.hour)}</td>}
                 {col("deadline") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkMuted }}>{minToLabel(r.deadline)}</td>}
-                {col("punch") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkMuted }}>{minToLabel(r.punch)}</td>}
-                {col("delay") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: r.status === "Late" ? STATUS_META.Late.fg : c.inkFaint }}>{r.status === "Late" ? `+${r.delay} min` : "—"}</td>}
+{col("punch") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: r.status === "OD" ? STATUS_META.OD.fg : c.inkMuted }}>{r.status === "OD" ? "OD" : minToLabel(r.punch)}</td>}
+                {col("delay") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: r.status === "Late" ? STATUS_META.Late.fg : r.status === "OD" ? STATUS_META.OD.fg : c.inkFaint }}>{r.status === "OD" ? "OD" : r.status === "Late" ? `+${r.delay} min` : "—"}</td>}
                 {col("status") && <td className="px-4 py-3 whitespace-nowrap"><Badge status={r.status} /></td>}
               </tr>
             ))}
@@ -1231,8 +1231,9 @@ function TeacherDrawer({ c, teacherId, onClose, todayRecords, teachers = [] }) {
     const present = working.filter((h) => h.status === "Present").length;
     const late = working.filter((h) => h.status === "Late").length;
     const absent = working.filter((h) => h.status === "Absent").length;
-    const pct = working.length ? Math.round(((present + late) / working.length) * 100) : 0;
-    return { workingDays: working.length, present, late, absent, pct };
+    const od = working.filter((h) => h.status === "OD").length;
+    const pct = working.length ? Math.round(((present + late + od) / working.length) * 100) : 0;
+    return { workingDays: working.length, present, late, absent, od, pct };
   }, [history]);
 
   const chartData = history.slice(-14).map((h) => ({
@@ -1271,17 +1272,19 @@ function TeacherDrawer({ c, teacherId, onClose, todayRecords, teachers = [] }) {
                 <div className="grid grid-cols-2 gap-3 text-[12.5px]">
                   <div><div style={{ color: c.inkFaint }} className="text-[11px]">Subject</div><div className="font-semibold">{today?.subject || "—"}</div></div>
                   <div><div style={{ color: c.inkFaint }} className="text-[11px]">Reporting time</div><div className="font-semibold ff-mono">{today ? minToLabel(today.deadline) : "—"}</div></div>
-                  <div><div style={{ color: c.inkFaint }} className="text-[11px]">Punch time</div><div className="font-semibold ff-mono">{today ? minToLabel(today.punch) : "—"}</div></div>
-                  <div><div style={{ color: c.inkFaint }} className="text-[11px]">Delay</div><div className="font-semibold ff-mono">{today?.status === "Late" ? `+${today.delay} min` : "—"}</div></div>
+<div><div style={{ color: c.inkFaint }} className="text-[11px]">Punch time</div><div className="font-semibold ff-mono" style={{ color: today?.status === "OD" ? STATUS_META.OD.fg : undefined }}>{today ? (today.status === "OD" ? "OD" : minToLabel(today.punch)) : "—"}</div></div>
+                  <div><div style={{ color: c.inkFaint }} className="text-[11px]">Delay</div><div className="font-semibold ff-mono" style={{ color: today?.status === "OD" ? STATUS_META.OD.fg : undefined }}>{today?.status === "OD" ? "OD" : today?.status === "Late" ? `+${today.delay} min` : "—"}</div></div>
                 </div>
               </div>
 
               {stats && (
-                <div className="grid grid-cols-4 gap-2.5">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                   <StatMini c={c} label="Attendance" value={`${stats.pct}%`} tone={c.brand} />
                   <StatMini c={c} label="Late (30d)" value={stats.late} tone={STATUS_META.Late.fg} />
-                  <StatMini c={c} label="Late this month" value={mStats.late} tone={STATUS_META.Late.fg} />
                   <StatMini c={c} label="Absent (30d)" value={stats.absent} tone={STATUS_META.Absent.fg} />
+                  <StatMini c={c} label="OD days (30d)" value={stats.od} tone={STATUS_META.OD.fg} />
+                  <StatMini c={c} label="OD this month" value={mStats.od} tone={STATUS_META.OD.fg} />
+                  <StatMini c={c} label="Late this month" value={mStats.late} tone={STATUS_META.Late.fg} />
                 </div>
               )}
 
