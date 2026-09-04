@@ -521,6 +521,7 @@ export default function FacultyFlowApp() {
   const [watchConnected, setWatchConnected] = useState(true);
   const [tt, setTt] = useState(null);
   const [punchMap, setPunchMap] = useState(null);
+  const [punchOutMap, setPunchOutMap] = useState(null);
   const [sources, setSources] = useState({ timetable: "— no timetable —", punch: "— no punch sheet —" });
   const [historyKey, setHistoryKey] = useState(0);
 
@@ -538,13 +539,13 @@ export default function FacultyFlowApp() {
   useEffect(() => {
     const saved = loadState();
     if (saved.tt) { setTt(saved.tt); setSources((s) => ({ ...s, timetable: saved.ttName || "timetable.xlsx" })); }
-    if (saved.punch && saved.punchDate === dayKey(new Date())) { setPunchMap(saved.punch); setSources((s) => ({ ...s, punch: saved.punchName || "punch-sheet.xlsx" })); }
+    if (saved.punch && saved.punchDate === dayKey(new Date())) { setPunchMap(saved.punch); setPunchOutMap(saved.punchOut || null); setSources((s) => ({ ...s, punch: saved.punchName || "punch-sheet.xlsx" })); }
   }, []);
 
   const syncNow = useCallback((manual) => {
     const saved = loadState();
     setLastSync(new Date());
-    if (saved.punch && saved.punchDate === dayKey(new Date())) setPunchMap(saved.punch);
+    if (saved.punch && saved.punchDate === dayKey(new Date())) { setPunchMap(saved.punch); setPunchOutMap(saved.punchOut || null); }
     setHistoryKey((k) => k + 1);
     if (manual) pushToast("Sync complete", "Attendance recalculated from the current data sources.", "sync");
   }, [pushToast]);
@@ -576,7 +577,7 @@ export default function FacultyFlowApp() {
 
 
   const nowMin = clock.getHours() * 60 + clock.getMinutes();
-  const todayRecords = useMemo(() => buildRecords(tt, punchMap, clock, nowMin, settings), [tt, punchMap, nowMin, settings]);
+  const todayRecords = useMemo(() => buildRecords(tt, punchMap, clock, nowMin, settings, punchOutMap), [tt, punchMap, punchOutMap, nowMin, settings]);
   const teachers = tt ? tt.teachers : [];
 
   useEffect(() => {
@@ -587,7 +588,8 @@ export default function FacultyFlowApp() {
 
   const clearPunchSheet = useCallback(() => {
     setPunchMap(null);
-    persistState({ punch: null, punchName: null, punchDate: null });
+    setPunchOutMap(null);
+    persistState({ punch: null, punchOut: null, punchName: null, punchDate: null });
     deleteHistoryDay(dayKey(new Date()));
     setSources((s) => ({ ...s, punch: "— no punch sheet —" }));
     setHistoryKey((k) => k + 1);
@@ -605,11 +607,12 @@ export default function FacultyFlowApp() {
 
   const applyPunchUpload = useCallback(async (file) => {
     if (!tt) { pushToast("Upload a timetable first", "Punch data is verified against the active timetable.", "error"); return; }
-    const map = await parsePunchFile(file, tt.teachers);
+    const { map, outMap } = await parsePunchFile(file, tt.teachers);
     const n = Object.keys(map).length;
     if (!n) { pushToast("No punches matched", "No faculty names in the punch sheet matched the active timetable.", "error"); return; }
     setPunchMap(map);
-    persistState({ punch: map, punchName: file.name, punchDate: dayKey(new Date()) });
+    setPunchOutMap(outMap);
+    persistState({ punch: map, punchOut: outMap, punchName: file.name, punchDate: dayKey(new Date()) });
     setSources((s) => ({ ...s, punch: file.name }));
     setLastSync(new Date());
     pushToast("Punch sheet applied", `${n} punches matched against today's timetable.`, "success");
