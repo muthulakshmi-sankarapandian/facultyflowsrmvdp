@@ -6,7 +6,7 @@ import {
   Sun, Moon, Monitor, Download, X, Menu, ArrowUpDown, Calendar as CalendarIcon,
   TrendingUp, Users, FileSpreadsheet, Bell, ChevronRight as ChevronRightIcon,
   FolderSync, PlugZap, Coffee, PauseCircle, SlidersHorizontal, Columns3,
-  ArrowRight, Building2, BookOpen, Timer, PieChart as PieChartIcon, Trash2, CalendarPlus
+  ArrowRight, Building2, BookOpen, Timer, PieChart as PieChartIcon, Trash2, CalendarPlus, LogOut
 } from "lucide-react";
 import {
   ResponsiveContainer, LineChart, Line, AreaChart, Area, BarChart, Bar,
@@ -202,7 +202,7 @@ function fuzzyFindTeacher(teachers, rawName) {
 }
 
 function parseVerticalBlocks(grid, txt, dept) {
-  const teachers = [], timetable = {}, subjects = {};
+  const teachers = [], timetable = {}, subjects = {}, lastTimetable = {};
   let currentTeacher = null, currentId = null;
   for (const rawRow of grid) {
     const row = rawRow || [];
@@ -220,23 +220,25 @@ function parseVerticalBlocks(grid, txt, dept) {
     if (!currentTeacher) continue;
     if (asNum < 1 || asNum > 5) continue;
     const day = DAY_KEYS[asNum];
-    let hour = null, subject = "";
+    let hour = null, lastHour = null, subject = "";
     for (let c = 1; c < row.length; c++) {
       const v = txt(row[c]);
-      if (v) { hour = c; subject = v; break; }
+      if (v) { if (hour == null) { hour = c; subject = v; } lastHour = c; }
     }
     if (hour == null) continue;
     if (!timetable[currentId]) {
       timetable[currentId] = {};
       subjects[currentId] = {};
+      lastTimetable[currentId] = {};
       teachers.push({ id: currentId, name: currentTeacher, dept: dept || "Faculty", tokens: nameTokens(currentTeacher) });
     }
     if (timetable[currentId][day] == null) {
       timetable[currentId][day] = hour;
       subjects[currentId][day] = subject;
+      lastTimetable[currentId][day] = lastHour;
     }
   }
-  return { teachers, timetable, subjects };
+  return { teachers, timetable, subjects, lastTimetable };
 }
 
 async function parseTimetableFile(file) {
@@ -256,7 +258,7 @@ async function parseTimetableFile(file) {
     if (dept) break;
   }
   const grid = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: null, raw: false });
-  const teachers = [], timetable = {}, subjects = {};
+  const teachers = [], timetable = {}, subjects = {}, lastTimetable = {};
   for (let r = 1; r < grid.length; r++) {
     const row = grid[r] || [];
     for (let cc = 0; cc < row.length; cc++) {
@@ -267,18 +269,19 @@ async function parseTimetableFile(file) {
       if (name.length < 4 || !/[a-z]{3}/i.test(name)) continue;
       const id = slugify(name);
       if (timetable[id]) continue;
-      const days = {}, subs = {};
+      const days = {}, subs = {}, lastDays = {};
       for (let i = 0; i < 5; i++) {
         const dr = grid[r + 1 + i] || [];
         for (let h = 1; h <= 7; h++) {
           const v = txt(dr[cc + h]);
-          if (v) { days[DAY_KEYS[i + 1]] = h; subs[DAY_KEYS[i + 1]] = v; break; }
+          if (v) { if (days[DAY_KEYS[i + 1]] == null) { days[DAY_KEYS[i + 1]] = h; subs[DAY_KEYS[i + 1]] = v; } lastDays[DAY_KEYS[i + 1]] = h; }
         }
       }
       if (!Object.keys(days).length) continue;
       teachers.push({ id, name, dept: dept || "Faculty", tokens: nameTokens(name) });
       timetable[id] = days;
       subjects[id] = subs;
+      lastTimetable[id] = lastDays;
     }
   }
   if (!teachers.length) {
@@ -286,7 +289,7 @@ async function parseTimetableFile(file) {
     if (!v.teachers.length) throw new Error("no faculty blocks found");
     return { ...v, dept };
   }
-  return { teachers, timetable, subjects, dept };
+  return { teachers, timetable, subjects, lastTimetable, dept };
 }
 
 function pickEntry(entries, tests) {
