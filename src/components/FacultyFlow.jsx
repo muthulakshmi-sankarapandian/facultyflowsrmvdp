@@ -320,22 +320,25 @@ function punchToMin(raw) {
   return h * 60 + mm;
 }
 function punchRowsToMap(rows, teachers) {
-  const map = {};
+  const map = {}, outMap = {};
   rows.forEach((row) => {
     const entries = Object.entries(row).filter(([k]) => k !== "__rowNum__");
     const nameEntry = pickEntry(entries, [/faculty\s*name/i, /(teacher|staff|employee)\s*name/i, /^name$/i, /name/i]);
     const timeEntry = pickEntry(entries, [/first\s*in/i, /in\s*time/i, /punch/i, /\bin\b/i, /time/i]);
     if (!nameEntry) return;
+    const outEntry = pickEntry(entries, [/last\s*out/i, /out\s*time/i, /\bout\b/i]);
     const typeEntry = pickEntry(entries, [/attendance\s*type/i, /\btype\b/i]);
     const isOD = typeEntry && /on\s*field/i.test(String(typeEntry[1]));
     const min = timeEntry ? punchToMin(timeEntry[1]) : null;
+    const outMin = outEntry ? punchToMin(outEntry[1]) : null;
     if (!isOD && (min == null || min <= 0)) return;
     const t = fuzzyFindTeacher(teachers, nameEntry[1]);
     if (!t) return;
+    if (outMin != null && outMin > 0 && (outMap[t.id] == null || outMin > outMap[t.id])) outMap[t.id] = outMin;
     if (isOD) { if (map[t.id] == null || map[t.id] === "OD") map[t.id] = "OD"; return; }
     if (map[t.id] == null || map[t.id] === "OD" || min < map[t.id]) map[t.id] = min;
   });
-  return map;
+  return { map, outMap };
 }
 
 
@@ -386,7 +389,7 @@ async function parsePastPunchFile(file, teachers) {
     if (!ws) continue;
     const grid = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
     const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
-    const map = punchRowsToMap(rows, teachers);
+    const { map } = punchRowsToMap(rows, teachers);
     if (!Object.keys(map).length) continue;
     const date = dateFromToken(name) || findSheetDate(grid, wb.SheetNames.length > 1 ? "" : file.name) || dateFromToken(file.name);
     out.push({ sheet: name, map, date });
@@ -406,7 +409,9 @@ function mergeHistoryDay(key, records) {
   return records.length;
 }
 
-function buildRecords(tt, punchMap, date, nowMin, settings) {
+const EARLY_EXIT_GRACE = 30;
+function classEndMin(hour) { return 480 + hour * 50; }
+function buildRecords(tt, punchMap, date, nowMin, settings, outMap) {
   if (!tt || !punchMap) return [];
   const st = settings || loadSettings();
   const wd = DAY_KEYS[date.getDay()];
@@ -420,10 +425,16 @@ function buildRecords(tt, punchMap, date, nowMin, settings) {
       const isOD = raw === "OD";
       const punch = raw == null || isOD ? null : raw;
       const status = blocked ? "Holiday" : isOD ? "OD" : punch != null ? (punch <= deadline ? "Present" : "Late") : nowMin >= deadline ? "Absent" : "Waiting";
+      const lastHour = tt.lastTimetable?.[t.id]?.[wd] ?? hour;
+      const endMin = classEndMin(lastHour);
+      const lastOut = outMap?.[t.id] ?? null;
+      const earlyExit = !blocked && lastOut != null && lastOut < endMin - EARLY_EXIT_GRACE;
       return {
         id: t.id, name: t.name, dept: t.dept, subject: (tt.subjects[t.id] || {})[wd] || "—",
         hour, firstClass: hour, deadline, punch, status,
         delay: status === "Late" ? punch - deadline : null,
+        lastHour, endMin, lastOut, earlyExit,
+        earlyBy: earlyExit ? endMin - lastOut : null,
       };
     });
 }
