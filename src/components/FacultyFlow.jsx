@@ -1285,6 +1285,95 @@ function Th({ c, label, onClick, active, dir, sticky }) {
 
 /* -------------------------------- TEACHER DRAWER ------------------------------- */
 
+function EarlyExitsPage({ c, records, clock, onOpenTeacher, hasData }) {
+  const flagged = records.filter((r) => r.earlyExit).sort((a, b) => b.earlyBy - a.earlyBy);
+  const punchedOut = records.filter((r) => r.lastOut != null);
+  const th = { padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: c.inkFaint, borderBottom: `1px solid ${c.border}`, whiteSpace: "nowrap" };
+  const td = { padding: "12px 14px", fontSize: 13, borderBottom: `1px solid ${c.border}`, whiteSpace: "nowrap" };
+  return (
+    <div className="space-y-6">
+      <div className="rounded-2xl p-5 sm:p-6" style={{ background: c.surface, border: `1px solid ${c.border}`, boxShadow: "0 1px 2px rgba(0,0,0,.03)" }}>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-[16px] font-bold flex items-center gap-2" style={{ fontFamily: "'Inter Tight', Inter, sans-serif" }}>
+              <LogOut size={17} style={{ color: c.brand }} /> Early exits
+            </h2>
+            <p className="text-[13px] mt-0.5" style={{ color: c.inkFaint }}>
+              Teachers whose Last OUT punch is more than {EARLY_EXIT_GRACE} minutes before their final scheduled class ends · {dateLabel(clock)}
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <div className="rounded-xl px-4 py-2.5 text-center" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}` }}>
+              <div className="text-[20px] font-extrabold ff-mono" style={{ color: STATUS_META.Absent.fg, fontFamily: "'Inter Tight', Inter, sans-serif" }}>{flagged.length}</div>
+              <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: c.inkFaint }}>Flagged</div>
+            </div>
+            <div className="rounded-xl px-4 py-2.5 text-center" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}` }}>
+              <div className="text-[20px] font-extrabold ff-mono" style={{ color: c.ink, fontFamily: "'Inter Tight', Inter, sans-serif" }}>{punchedOut.length}</div>
+              <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: c.inkFaint }}>OUT punches</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl overflow-hidden" style={{ background: c.surface, border: `1px solid ${c.border}`, boxShadow: "0 1px 2px rgba(0,0,0,.03)" }}>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] border-collapse">
+            <thead>
+              <tr style={{ background: c.surfaceAlt }}>
+                <th style={th}>Teacher</th>
+                <th style={th}>Department</th>
+                <th style={th}>Status</th>
+                <th style={th}>Last OUT</th>
+                <th style={th}>Classes end</th>
+                <th style={th}>Early by</th>
+                <th style={th}>Warning</th>
+              </tr>
+            </thead>
+            <tbody>
+              {flagged.map((r) => (
+                <tr key={r.id} className="transition-colors" style={{ background: "transparent" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = c.surfaceAlt)}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+                  <td style={td}>
+                    <button onClick={() => onOpenTeacher(r.id)} className="font-semibold hover:underline" style={{ color: c.ink }}>{r.name}</button>
+                  </td>
+                  <td style={{ ...td, color: c.inkMuted }}>{r.dept}</td>
+                  <td style={td}><Badge status={r.status} /></td>
+                  <td style={{ ...td, color: c.ink }} className="ff-mono">{minToLabel(r.lastOut)}</td>
+                  <td style={{ ...td, color: c.inkMuted }} className="ff-mono">{minToLabel(r.endMin)}</td>
+                  <td style={{ ...td, color: STATUS_META.Late.fg }} className="ff-mono">{r.earlyBy} min</td>
+                  <td style={td}>
+                    <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium" style={{ color: STATUS_META.Absent.fg, background: STATUS_META.Absent.bg }}>
+                      <AlertTriangle size={12} /> Left early
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              {!flagged.length && (
+                <tr>
+                  <td colSpan={7} style={{ ...td, textAlign: "center", padding: "48px 14px", whiteSpace: "normal" }}>
+                    <div className="flex flex-col items-center gap-2">
+                      <CheckCircle2 size={26} style={{ color: STATUS_META.Present.fg }} />
+                      <div className="text-[14px] font-semibold" style={{ color: c.ink }}>
+                        {hasData ? "No early exits detected" : "No data available"}
+                      </div>
+                      <div className="text-[12px]" style={{ color: c.inkFaint }}>
+                        {hasData
+                          ? "Every teacher with an OUT punch stayed until the end of their scheduled classes."
+                          : "Upload a timetable and today's punch sheet (with a Last OUT column) to audit early departures."}
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TeacherDrawer({ c, teacherId, onClose, todayRecords, teachers = [] }) {
   const teacher = teachers.find((t) => t.id === teacherId);
   const today = todayRecords.find((r) => r.id === teacherId);
