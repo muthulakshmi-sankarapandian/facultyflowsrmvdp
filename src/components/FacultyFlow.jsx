@@ -6,7 +6,7 @@ import {
   Sun, Moon, Monitor, Download, X, Menu, ArrowUpDown, Calendar as CalendarIcon,
   TrendingUp, Users, FileSpreadsheet, Bell, ChevronRight as ChevronRightIcon,
   FolderSync, PlugZap, Coffee, PauseCircle, SlidersHorizontal, Columns3,
-  ArrowRight, Building2, BookOpen, Timer, PieChart as PieChartIcon, Trash2, CalendarPlus
+  ArrowRight, Building2, BookOpen, Timer, PieChart as PieChartIcon, Trash2, CalendarPlus, LogOut
 } from "lucide-react";
 import {
   ResponsiveContainer, LineChart, Line, AreaChart, Area, BarChart, Bar,
@@ -202,7 +202,7 @@ function fuzzyFindTeacher(teachers, rawName) {
 }
 
 function parseVerticalBlocks(grid, txt, dept) {
-  const teachers = [], timetable = {}, subjects = {};
+  const teachers = [], timetable = {}, subjects = {}, lastTimetable = {};
   let currentTeacher = null, currentId = null;
   for (const rawRow of grid) {
     const row = rawRow || [];
@@ -220,23 +220,25 @@ function parseVerticalBlocks(grid, txt, dept) {
     if (!currentTeacher) continue;
     if (asNum < 1 || asNum > 5) continue;
     const day = DAY_KEYS[asNum];
-    let hour = null, subject = "";
+    let hour = null, lastHour = null, subject = "";
     for (let c = 1; c < row.length; c++) {
       const v = txt(row[c]);
-      if (v) { hour = c; subject = v; break; }
+      if (v) { if (hour == null) { hour = c; subject = v; } lastHour = c; }
     }
     if (hour == null) continue;
     if (!timetable[currentId]) {
       timetable[currentId] = {};
       subjects[currentId] = {};
+      lastTimetable[currentId] = {};
       teachers.push({ id: currentId, name: currentTeacher, dept: dept || "Faculty", tokens: nameTokens(currentTeacher) });
     }
     if (timetable[currentId][day] == null) {
       timetable[currentId][day] = hour;
       subjects[currentId][day] = subject;
+      lastTimetable[currentId][day] = lastHour;
     }
   }
-  return { teachers, timetable, subjects };
+  return { teachers, timetable, subjects, lastTimetable };
 }
 
 async function parseTimetableFile(file) {
@@ -256,7 +258,7 @@ async function parseTimetableFile(file) {
     if (dept) break;
   }
   const grid = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: null, raw: false });
-  const teachers = [], timetable = {}, subjects = {};
+  const teachers = [], timetable = {}, subjects = {}, lastTimetable = {};
   for (let r = 1; r < grid.length; r++) {
     const row = grid[r] || [];
     for (let cc = 0; cc < row.length; cc++) {
@@ -267,18 +269,19 @@ async function parseTimetableFile(file) {
       if (name.length < 4 || !/[a-z]{3}/i.test(name)) continue;
       const id = slugify(name);
       if (timetable[id]) continue;
-      const days = {}, subs = {};
+      const days = {}, subs = {}, lastDays = {};
       for (let i = 0; i < 5; i++) {
         const dr = grid[r + 1 + i] || [];
         for (let h = 1; h <= 7; h++) {
           const v = txt(dr[cc + h]);
-          if (v) { days[DAY_KEYS[i + 1]] = h; subs[DAY_KEYS[i + 1]] = v; break; }
+          if (v) { if (days[DAY_KEYS[i + 1]] == null) { days[DAY_KEYS[i + 1]] = h; subs[DAY_KEYS[i + 1]] = v; } lastDays[DAY_KEYS[i + 1]] = h; }
         }
       }
       if (!Object.keys(days).length) continue;
       teachers.push({ id, name, dept: dept || "Faculty", tokens: nameTokens(name) });
       timetable[id] = days;
       subjects[id] = subs;
+      lastTimetable[id] = lastDays;
     }
   }
   if (!teachers.length) {
@@ -286,7 +289,7 @@ async function parseTimetableFile(file) {
     if (!v.teachers.length) throw new Error("no faculty blocks found");
     return { ...v, dept };
   }
-  return { teachers, timetable, subjects, dept };
+  return { teachers, timetable, subjects, lastTimetable, dept };
 }
 
 function pickEntry(entries, tests) {
@@ -317,22 +320,25 @@ function punchToMin(raw) {
   return h * 60 + mm;
 }
 function punchRowsToMap(rows, teachers) {
-  const map = {};
+  const map = {}, outMap = {};
   rows.forEach((row) => {
     const entries = Object.entries(row).filter(([k]) => k !== "__rowNum__");
     const nameEntry = pickEntry(entries, [/faculty\s*name/i, /(teacher|staff|employee)\s*name/i, /^name$/i, /name/i]);
     const timeEntry = pickEntry(entries, [/first\s*in/i, /in\s*time/i, /punch/i, /\bin\b/i, /time/i]);
     if (!nameEntry) return;
+    const outEntry = pickEntry(entries, [/last\s*out/i, /out\s*time/i, /\bout\b/i]);
     const typeEntry = pickEntry(entries, [/attendance\s*type/i, /\btype\b/i]);
     const isOD = typeEntry && /on\s*field/i.test(String(typeEntry[1]));
     const min = timeEntry ? punchToMin(timeEntry[1]) : null;
+    const outMin = outEntry ? punchToMin(outEntry[1]) : null;
     if (!isOD && (min == null || min <= 0)) return;
     const t = fuzzyFindTeacher(teachers, nameEntry[1]);
     if (!t) return;
+    if (outMin != null && outMin > 0 && (outMap[t.id] == null || outMin > outMap[t.id])) outMap[t.id] = outMin;
     if (isOD) { if (map[t.id] == null || map[t.id] === "OD") map[t.id] = "OD"; return; }
     if (map[t.id] == null || map[t.id] === "OD" || min < map[t.id]) map[t.id] = min;
   });
-  return map;
+  return { map, outMap };
 }
 
 
@@ -383,7 +389,7 @@ async function parsePastPunchFile(file, teachers) {
     if (!ws) continue;
     const grid = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
     const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
-    const map = punchRowsToMap(rows, teachers);
+    const { map } = punchRowsToMap(rows, teachers);
     if (!Object.keys(map).length) continue;
     const date = dateFromToken(name) || findSheetDate(grid, wb.SheetNames.length > 1 ? "" : file.name) || dateFromToken(file.name);
     out.push({ sheet: name, map, date });
@@ -403,7 +409,9 @@ function mergeHistoryDay(key, records) {
   return records.length;
 }
 
-function buildRecords(tt, punchMap, date, nowMin, settings) {
+const EARLY_EXIT_GRACE = 30;
+function classEndMin(hour) { return 480 + hour * 50; }
+function buildRecords(tt, punchMap, date, nowMin, settings, outMap) {
   if (!tt || !punchMap) return [];
   const st = settings || loadSettings();
   const wd = DAY_KEYS[date.getDay()];
@@ -417,10 +425,16 @@ function buildRecords(tt, punchMap, date, nowMin, settings) {
       const isOD = raw === "OD";
       const punch = raw == null || isOD ? null : raw;
       const status = blocked ? "Holiday" : isOD ? "OD" : punch != null ? (punch <= deadline ? "Present" : "Late") : nowMin >= deadline ? "Absent" : "Waiting";
+      const lastHour = tt.lastTimetable?.[t.id]?.[wd] ?? hour;
+      const endMin = classEndMin(lastHour);
+      const lastOut = outMap?.[t.id] ?? null;
+      const earlyExit = !blocked && lastOut != null && lastOut < endMin - EARLY_EXIT_GRACE;
       return {
         id: t.id, name: t.name, dept: t.dept, subject: (tt.subjects[t.id] || {})[wd] || "—",
         hour, firstClass: hour, deadline, punch, status,
         delay: status === "Late" ? punch - deadline : null,
+        lastHour, endMin, lastOut, earlyExit,
+        earlyBy: earlyExit ? endMin - lastOut : null,
       };
     });
 }
@@ -507,6 +521,7 @@ export default function FacultyFlowApp() {
   const [watchConnected, setWatchConnected] = useState(true);
   const [tt, setTt] = useState(null);
   const [punchMap, setPunchMap] = useState(null);
+  const [punchOutMap, setPunchOutMap] = useState(null);
   const [sources, setSources] = useState({ timetable: "— no timetable —", punch: "— no punch sheet —" });
   const [historyKey, setHistoryKey] = useState(0);
 
@@ -524,13 +539,13 @@ export default function FacultyFlowApp() {
   useEffect(() => {
     const saved = loadState();
     if (saved.tt) { setTt(saved.tt); setSources((s) => ({ ...s, timetable: saved.ttName || "timetable.xlsx" })); }
-    if (saved.punch && saved.punchDate === dayKey(new Date())) { setPunchMap(saved.punch); setSources((s) => ({ ...s, punch: saved.punchName || "punch-sheet.xlsx" })); }
+    if (saved.punch && saved.punchDate === dayKey(new Date())) { setPunchMap(saved.punch); setPunchOutMap(saved.punchOut || null); setSources((s) => ({ ...s, punch: saved.punchName || "punch-sheet.xlsx" })); }
   }, []);
 
   const syncNow = useCallback((manual) => {
     const saved = loadState();
     setLastSync(new Date());
-    if (saved.punch && saved.punchDate === dayKey(new Date())) setPunchMap(saved.punch);
+    if (saved.punch && saved.punchDate === dayKey(new Date())) { setPunchMap(saved.punch); setPunchOutMap(saved.punchOut || null); }
     setHistoryKey((k) => k + 1);
     if (manual) pushToast("Sync complete", "Attendance recalculated from the current data sources.", "sync");
   }, [pushToast]);
@@ -562,7 +577,7 @@ export default function FacultyFlowApp() {
 
 
   const nowMin = clock.getHours() * 60 + clock.getMinutes();
-  const todayRecords = useMemo(() => buildRecords(tt, punchMap, clock, nowMin, settings), [tt, punchMap, nowMin, settings]);
+  const todayRecords = useMemo(() => buildRecords(tt, punchMap, clock, nowMin, settings, punchOutMap), [tt, punchMap, punchOutMap, nowMin, settings]);
   const teachers = tt ? tt.teachers : [];
 
   useEffect(() => {
@@ -573,7 +588,8 @@ export default function FacultyFlowApp() {
 
   const clearPunchSheet = useCallback(() => {
     setPunchMap(null);
-    persistState({ punch: null, punchName: null, punchDate: null });
+    setPunchOutMap(null);
+    persistState({ punch: null, punchOut: null, punchName: null, punchDate: null });
     deleteHistoryDay(dayKey(new Date()));
     setSources((s) => ({ ...s, punch: "— no punch sheet —" }));
     setHistoryKey((k) => k + 1);
@@ -591,11 +607,12 @@ export default function FacultyFlowApp() {
 
   const applyPunchUpload = useCallback(async (file) => {
     if (!tt) { pushToast("Upload a timetable first", "Punch data is verified against the active timetable.", "error"); return; }
-    const map = await parsePunchFile(file, tt.teachers);
+    const { map, outMap } = await parsePunchFile(file, tt.teachers);
     const n = Object.keys(map).length;
     if (!n) { pushToast("No punches matched", "No faculty names in the punch sheet matched the active timetable.", "error"); return; }
     setPunchMap(map);
-    persistState({ punch: map, punchName: file.name, punchDate: dayKey(new Date()) });
+    setPunchOutMap(outMap);
+    persistState({ punch: map, punchOut: outMap, punchName: file.name, punchDate: dayKey(new Date()) });
     setSources((s) => ({ ...s, punch: file.name }));
     setLastSync(new Date());
     pushToast("Punch sheet applied", `${n} punches matched against today's timetable.`, "success");
@@ -651,6 +668,11 @@ export default function FacultyFlowApp() {
 
                 </motion.div>
               )}
+              {page === "earlyexits" && (
+                <motion.div key="early" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}>
+                  <EarlyExitsPage c={c} records={todayRecords} clock={clock} onOpenTeacher={setDrawerTeacher} hasData={!!tt && !!punchMap} />
+                </motion.div>
+              )}
               {page === "settings" && (
                 <motion.div key="set" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}>
                   <SettingsPage c={c} themeMode={themeMode} setThemeMode={setThemeMode} pushToast={pushToast} settings={settings} updateSettings={updateSettings} />
@@ -675,6 +697,7 @@ function Sidebar({ c, page, setPage, open, setOpen, mobileOpen, setMobileOpen })
   const items = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "history", label: "History", icon: HistoryIcon },
+    { id: "earlyexits", label: "Early Exits", icon: LogOut },
     { id: "settings", label: "Settings", icon: SettingsIcon },
   ];
 
@@ -1261,6 +1284,95 @@ function Th({ c, label, onClick, active, dir, sticky }) {
 }
 
 /* -------------------------------- TEACHER DRAWER ------------------------------- */
+
+function EarlyExitsPage({ c, records, clock, onOpenTeacher, hasData }) {
+  const flagged = records.filter((r) => r.earlyExit).sort((a, b) => b.earlyBy - a.earlyBy);
+  const punchedOut = records.filter((r) => r.lastOut != null);
+  const th = { padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: c.inkFaint, borderBottom: `1px solid ${c.border}`, whiteSpace: "nowrap" };
+  const td = { padding: "12px 14px", fontSize: 13, borderBottom: `1px solid ${c.border}`, whiteSpace: "nowrap" };
+  return (
+    <div className="space-y-6">
+      <div className="rounded-2xl p-5 sm:p-6" style={{ background: c.surface, border: `1px solid ${c.border}`, boxShadow: "0 1px 2px rgba(0,0,0,.03)" }}>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-[16px] font-bold flex items-center gap-2" style={{ fontFamily: "'Inter Tight', Inter, sans-serif" }}>
+              <LogOut size={17} style={{ color: c.brand }} /> Early exits
+            </h2>
+            <p className="text-[13px] mt-0.5" style={{ color: c.inkFaint }}>
+              Teachers whose Last OUT punch is more than {EARLY_EXIT_GRACE} minutes before their final scheduled class ends · {dateLabel(clock)}
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <div className="rounded-xl px-4 py-2.5 text-center" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}` }}>
+              <div className="text-[20px] font-extrabold ff-mono" style={{ color: STATUS_META.Absent.fg, fontFamily: "'Inter Tight', Inter, sans-serif" }}>{flagged.length}</div>
+              <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: c.inkFaint }}>Flagged</div>
+            </div>
+            <div className="rounded-xl px-4 py-2.5 text-center" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}` }}>
+              <div className="text-[20px] font-extrabold ff-mono" style={{ color: c.ink, fontFamily: "'Inter Tight', Inter, sans-serif" }}>{punchedOut.length}</div>
+              <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: c.inkFaint }}>OUT punches</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl overflow-hidden" style={{ background: c.surface, border: `1px solid ${c.border}`, boxShadow: "0 1px 2px rgba(0,0,0,.03)" }}>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] border-collapse">
+            <thead>
+              <tr style={{ background: c.surfaceAlt }}>
+                <th style={th}>Teacher</th>
+                <th style={th}>Department</th>
+                <th style={th}>Status</th>
+                <th style={th}>Last OUT</th>
+                <th style={th}>Classes end</th>
+                <th style={th}>Early by</th>
+                <th style={th}>Warning</th>
+              </tr>
+            </thead>
+            <tbody>
+              {flagged.map((r) => (
+                <tr key={r.id} className="transition-colors" style={{ background: "transparent" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = c.surfaceAlt)}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+                  <td style={td}>
+                    <button onClick={() => onOpenTeacher(r.id)} className="font-semibold hover:underline" style={{ color: c.ink }}>{r.name}</button>
+                  </td>
+                  <td style={{ ...td, color: c.inkMuted }}>{r.dept}</td>
+                  <td style={td}><Badge status={r.status} /></td>
+                  <td style={{ ...td, color: c.ink }} className="ff-mono">{minToLabel(r.lastOut)}</td>
+                  <td style={{ ...td, color: c.inkMuted }} className="ff-mono">{minToLabel(r.endMin)}</td>
+                  <td style={{ ...td, color: STATUS_META.Late.fg }} className="ff-mono">{r.earlyBy} min</td>
+                  <td style={td}>
+                    <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium" style={{ color: STATUS_META.Absent.fg, background: STATUS_META.Absent.bg }}>
+                      <AlertTriangle size={12} /> Left early
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              {!flagged.length && (
+                <tr>
+                  <td colSpan={7} style={{ ...td, textAlign: "center", padding: "48px 14px", whiteSpace: "normal" }}>
+                    <div className="flex flex-col items-center gap-2">
+                      <CheckCircle2 size={26} style={{ color: STATUS_META.Present.fg }} />
+                      <div className="text-[14px] font-semibold" style={{ color: c.ink }}>
+                        {hasData ? "No early exits detected" : "No data available"}
+                      </div>
+                      <div className="text-[12px]" style={{ color: c.inkFaint }}>
+                        {hasData
+                          ? "Every teacher with an OUT punch stayed until the end of their scheduled classes."
+                          : "Upload a timetable and today's punch sheet (with a Last OUT column) to audit early departures."}
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function TeacherDrawer({ c, teacherId, onClose, todayRecords, teachers = [] }) {
   const teacher = teachers.find((t) => t.id === teacherId);
