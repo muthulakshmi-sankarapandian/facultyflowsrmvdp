@@ -668,6 +668,11 @@ export default function FacultyFlowApp() {
 
                 </motion.div>
               )}
+              {page === "earlyexits" && (
+                <motion.div key="early" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}>
+                  <EarlyExitsPage c={c} records={todayRecords} clock={clock} onOpenTeacher={setDrawerTeacher} hasData={!!tt && !!punchMap} />
+                </motion.div>
+              )}
               {page === "settings" && (
                 <motion.div key="set" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}>
                   <SettingsPage c={c} themeMode={themeMode} setThemeMode={setThemeMode} pushToast={pushToast} settings={settings} updateSettings={updateSettings} />
@@ -692,6 +697,7 @@ function Sidebar({ c, page, setPage, open, setOpen, mobileOpen, setMobileOpen })
   const items = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "history", label: "History", icon: HistoryIcon },
+    { id: "earlyexits", label: "Early Exits", icon: LogOut },
     { id: "settings", label: "Settings", icon: SettingsIcon },
   ];
 
