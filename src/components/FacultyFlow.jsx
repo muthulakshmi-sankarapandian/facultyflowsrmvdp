@@ -622,8 +622,9 @@ export default function FacultyFlowApp() {
     const scheduled = todayRecords.filter((r) => r.status !== "Holiday").length;
     const by = (s) => todayRecords.filter((r) => r.status === s).length;
     const present = by("Present"), late = by("Late"), absent = by("Absent"), waiting = by("Waiting"), leave = by("Leave"), od = by("OD");
+    const earlyExits = todayRecords.filter((r) => r.earlyExit).length;
     const pct = scheduled ? Math.round(((present + late + od) / scheduled) * 100) : 0;
-    return { scheduled, present, late, absent, waiting, leave, od, pct };
+    return { scheduled, present, late, absent, waiting, leave, od, earlyExits, pct };
   }, [todayRecords]);
 
 
@@ -844,7 +845,7 @@ function Dashboard({ c, records, summary, onOpenTeacher, pushToast, syncNow, las
         <TeacherSearch c={c} todayRecords={records} teachers={teachers} />
       </div>
       <AttendanceTable c={c} records={records} onOpenTeacher={onOpenTeacher} pushToast={pushToast} clearPunchSheet={clearPunchSheet} />
-      <SummarySection c={c} summary={summary} />
+      <SummarySection c={c} summary={summary} records={todayRecords} onOpenTeacher={openTeacher} />
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
         <AttentionPanel c={c} records={records} onOpenTeacher={onOpenTeacher} />
         <UploadCard c={c} pushToast={pushToast} syncNow={syncNow} lastSync={lastSync}
