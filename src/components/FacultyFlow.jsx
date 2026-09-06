@@ -845,7 +845,7 @@ function Dashboard({ c, records, summary, onOpenTeacher, pushToast, syncNow, las
         <TeacherSearch c={c} todayRecords={records} teachers={teachers} />
       </div>
       <AttendanceTable c={c} records={records} onOpenTeacher={onOpenTeacher} pushToast={pushToast} clearPunchSheet={clearPunchSheet} />
-      <SummarySection c={c} summary={summary} records={todayRecords} onOpenTeacher={openTeacher} />
+      <SummarySection c={c} summary={summary} records={records} onOpenTeacher={onOpenTeacher} />
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
         <AttentionPanel c={c} records={records} onOpenTeacher={onOpenTeacher} />
         <UploadCard c={c} pushToast={pushToast} syncNow={syncNow} lastSync={lastSync}
@@ -858,13 +858,15 @@ function Dashboard({ c, records, summary, onOpenTeacher, pushToast, syncNow, las
 
 
 
-function SummarySection({ c, summary }) {
+function SummarySection({ c, summary, records = [], onOpenTeacher }) {
+  const earlyExitRows = records.filter((r) => r.earlyExit).sort((a, b) => (b.earlyBy || 0) - (a.earlyBy || 0));
   const cards = [
     { label: "Scheduled", value: summary.scheduled, icon: CalendarIcon, tone: c.ink },
     { label: "Present", value: summary.present, icon: CheckCircle2, tone: STATUS_META.Present.fg },
     { label: "Late", value: summary.late, icon: Clock, tone: STATUS_META.Late.fg },
     { label: "Absent", value: summary.absent, icon: XCircle, tone: STATUS_META.Absent.fg },
     { label: "On Duty", value: summary.od, icon: Coffee, tone: STATUS_META.OD.fg },
+    { label: "Early Exits", value: summary.earlyExits ?? 0, icon: LogOut, tone: STATUS_META.Absent.fg },
     { label: "Waiting", value: summary.waiting, icon: Timer, tone: STATUS_META.Waiting.fg },
   ];
   const segs = [
