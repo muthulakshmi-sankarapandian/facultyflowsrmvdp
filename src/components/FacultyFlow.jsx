@@ -898,7 +898,7 @@ function SummarySection({ c, summary, records = [], onOpenTeacher }) {
         ))}
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
         {cards.map((cd) => (
           <div key={cd.label} className="rounded-xl p-3.5" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}` }}>
             <div className="flex items-center gap-1.5 mb-2">
@@ -909,6 +909,30 @@ function SummarySection({ c, summary, records = [], onOpenTeacher }) {
           </div>
         ))}
       </div>
+
+      {earlyExitRows.length > 0 && (
+        <div className="mt-5 rounded-xl p-4" style={{ background: STATUS_META.Absent.bg, border: `1px solid ${STATUS_META.Absent.fg}33` }}>
+          <div className="flex items-center gap-1.5 mb-2.5">
+            <LogOut size={13} style={{ color: STATUS_META.Absent.fg }} />
+            <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: STATUS_META.Absent.fg }}>Early exits today · {earlyExitRows.length}</span>
+          </div>
+          <div className="space-y-1.5">
+            {earlyExitRows.slice(0, 5).map((r) => (
+              <button key={r.id} onClick={() => onOpenTeacher?.(r.id)} className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:brightness-[0.98]" style={{ background: c.surface }}>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[12.5px] font-semibold truncate" style={{ color: c.ink }}>{r.name}</div>
+                  <div className="text-[11px] truncate" style={{ color: c.inkFaint }}>{r.dept}</div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-[11.5px] font-semibold ff-mono" style={{ color: STATUS_META.Absent.fg }}>Out {minToLabel(r.lastOut)}</div>
+                  <div className="text-[10.5px] ff-mono" style={{ color: STATUS_META.Late.fg }}>{r.earlyBy} min early</div>
+                </div>
+              </button>
+            ))}
+            {earlyExitRows.length > 5 && <div className="text-[11px] text-center pt-1" style={{ color: c.inkFaint }}>+{earlyExitRows.length - 5} more — see Early Exits tab</div>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
