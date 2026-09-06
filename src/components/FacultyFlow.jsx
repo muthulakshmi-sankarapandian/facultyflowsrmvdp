@@ -144,7 +144,7 @@ function writeHistoryStore(store) {
 function saveHistoryDay(key, records) {
   if (!records.length) return;
   const store = loadHistoryStore();
-  store[key] = records.map((r) => ({ id: r.id, teacher: r.name, dept: r.dept, status: r.status, delay: r.delay, deadline: r.deadline, punch: r.punch }));
+  store[key] = records.map((r) => ({ id: r.id, teacher: r.name, dept: r.dept, status: r.status, delay: r.delay, deadline: r.deadline, punch: r.punch, lastOut: r.lastOut ?? null, earlyExit: !!r.earlyExit }));
   writeHistoryStore(store);
 }
 function deleteHistoryDay(key) {
@@ -403,7 +403,7 @@ function mergeHistoryDay(key, records) {
   const store = loadHistoryStore();
   const byId = {};
   (store[key] || []).forEach((r) => { byId[r.id] = r; });
-  records.forEach((r) => { byId[r.id] = { id: r.id, teacher: r.name, dept: r.dept, status: r.status, delay: r.delay, deadline: r.deadline, punch: r.punch }; });
+  records.forEach((r) => { byId[r.id] = { id: r.id, teacher: r.name, dept: r.dept, status: r.status, delay: r.delay, deadline: r.deadline, punch: r.punch, lastOut: r.lastOut ?? null, earlyExit: !!r.earlyExit }; });
   store[key] = Object.values(byId);
   writeHistoryStore(store);
   return records.length;
@@ -423,8 +423,8 @@ function buildRecords(tt, punchMap, date, nowMin, settings, outMap) {
       const deadline = deadlineForHour(hour, st);
       const raw = punchMap[t.id];
       const isOD = raw === "OD";
-      const punch = raw == null || isOD ? null : raw;
-      const status = blocked ? "Holiday" : isOD ? "OD" : punch != null ? (punch <= deadline ? "Present" : "Late") : nowMin >= deadline ? "Absent" : "Waiting";
+      const punch = raw == null || isOD || !Number.isFinite(raw) ? null : raw;
+      const status = blocked ? "Holiday" : isOD ? "OD" : punch != null ? (punch <= deadline ? "Present" : "Late") : "Absent";
       const lastHour = tt.lastTimetable?.[t.id]?.[wd] ?? hour;
       const endMin = classEndMin(lastHour);
       const lastOut = outMap?.[t.id] ?? null;
@@ -442,20 +442,21 @@ function buildRecords(tt, punchMap, date, nowMin, settings, outMap) {
 function monthStats(teacherId, todayRecord) {
   const now = new Date();
   const rows = historyRows().filter((r) => r.id === teacherId && r.date.getMonth() === now.getMonth() && r.date.getFullYear() === now.getFullYear());
-  if (todayRecord && !rows.some((r) => dayKey(r.date) === dayKey(now))) rows.push({ date: now, status: todayRecord.status, delay: todayRecord.delay });
+  if (todayRecord && !rows.some((r) => dayKey(r.date) === dayKey(now))) rows.push({ date: now, status: todayRecord.status, delay: todayRecord.delay, earlyExit: !!todayRecord.earlyExit });
   const working = rows.filter((r) => r.status !== "Holiday");
   const lateRows = rows.filter((r) => r.status === "Late");
     const present = rows.filter((r) => r.status === "Present").length;
     const absent = rows.filter((r) => r.status === "Absent").length;
     const leave = rows.filter((r) => r.status === "Leave").length;
     const od = rows.filter((r) => r.status === "OD").length;
+    const earlyExits = rows.filter((r) => r.earlyExit).length;
     const totalLateMin = lateRows.reduce((a, b) => a + (b.delay || 0), 0);
     return {
       month: now.toLocaleDateString("en-IN", { month: "long", year: "numeric" }),
       rows, lateRows,
       workingDays: working.length,
       late: lateRows.length,
-      present, absent, leave, od,
+      present, absent, leave, od, earlyExits,
       pct: working.length ? Math.round(((present + lateRows.length + od) / working.length) * 100) : 0,
     avgLate: lateRows.length ? Math.round(totalLateMin / lateRows.length) : 0,
     totalLateMin,
@@ -622,8 +623,9 @@ export default function FacultyFlowApp() {
     const scheduled = todayRecords.filter((r) => r.status !== "Holiday").length;
     const by = (s) => todayRecords.filter((r) => r.status === s).length;
     const present = by("Present"), late = by("Late"), absent = by("Absent"), waiting = by("Waiting"), leave = by("Leave"), od = by("OD");
+    const earlyExits = todayRecords.filter((r) => r.earlyExit).length;
     const pct = scheduled ? Math.round(((present + late + od) / scheduled) * 100) : 0;
-    return { scheduled, present, late, absent, waiting, leave, od, pct };
+    return { scheduled, present, late, absent, waiting, leave, od, earlyExits, pct };
   }, [todayRecords]);
 
 
@@ -844,7 +846,7 @@ function Dashboard({ c, records, summary, onOpenTeacher, pushToast, syncNow, las
         <TeacherSearch c={c} todayRecords={records} teachers={teachers} />
       </div>
       <AttendanceTable c={c} records={records} onOpenTeacher={onOpenTeacher} pushToast={pushToast} clearPunchSheet={clearPunchSheet} />
-      <SummarySection c={c} summary={summary} />
+      <SummarySection c={c} summary={summary} records={records} onOpenTeacher={onOpenTeacher} />
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
         <AttentionPanel c={c} records={records} onOpenTeacher={onOpenTeacher} />
         <UploadCard c={c} pushToast={pushToast} syncNow={syncNow} lastSync={lastSync}
@@ -857,13 +859,15 @@ function Dashboard({ c, records, summary, onOpenTeacher, pushToast, syncNow, las
 
 
 
-function SummarySection({ c, summary }) {
+function SummarySection({ c, summary, records = [], onOpenTeacher }) {
+  const earlyExitRows = records.filter((r) => r.earlyExit).sort((a, b) => (b.earlyBy || 0) - (a.earlyBy || 0));
   const cards = [
     { label: "Scheduled", value: summary.scheduled, icon: CalendarIcon, tone: c.ink },
     { label: "Present", value: summary.present, icon: CheckCircle2, tone: STATUS_META.Present.fg },
     { label: "Late", value: summary.late, icon: Clock, tone: STATUS_META.Late.fg },
     { label: "Absent", value: summary.absent, icon: XCircle, tone: STATUS_META.Absent.fg },
     { label: "On Duty", value: summary.od, icon: Coffee, tone: STATUS_META.OD.fg },
+    { label: "Early Exits", value: summary.earlyExits ?? 0, icon: LogOut, tone: STATUS_META.Absent.fg },
     { label: "Waiting", value: summary.waiting, icon: Timer, tone: STATUS_META.Waiting.fg },
   ];
   const segs = [
@@ -895,7 +899,7 @@ function SummarySection({ c, summary }) {
         ))}
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
         {cards.map((cd) => (
           <div key={cd.label} className="rounded-xl p-3.5" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}` }}>
             <div className="flex items-center gap-1.5 mb-2">
@@ -906,6 +910,30 @@ function SummarySection({ c, summary }) {
           </div>
         ))}
       </div>
+
+      {earlyExitRows.length > 0 && (
+        <div className="mt-5 rounded-xl p-4" style={{ background: STATUS_META.Absent.bg, border: `1px solid ${STATUS_META.Absent.fg}33` }}>
+          <div className="flex items-center gap-1.5 mb-2.5">
+            <LogOut size={13} style={{ color: STATUS_META.Absent.fg }} />
+            <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: STATUS_META.Absent.fg }}>Early exits today · {earlyExitRows.length}</span>
+          </div>
+          <div className="space-y-1.5">
+            {earlyExitRows.slice(0, 5).map((r) => (
+              <button key={r.id} onClick={() => onOpenTeacher?.(r.id)} className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:brightness-[0.98]" style={{ background: c.surface }}>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[12.5px] font-semibold truncate" style={{ color: c.ink }}>{r.name}</div>
+                  <div className="text-[11px] truncate" style={{ color: c.inkFaint }}>{r.dept}</div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-[11.5px] font-semibold ff-mono" style={{ color: STATUS_META.Absent.fg }}>Out {minToLabel(r.lastOut)}</div>
+                  <div className="text-[10.5px] ff-mono" style={{ color: STATUS_META.Late.fg }}>{r.earlyBy} min early</div>
+                </div>
+              </button>
+            ))}
+            {earlyExitRows.length > 5 && <div className="text-[11px] text-center pt-1" style={{ color: c.inkFaint }}>+{earlyExitRows.length - 5} more — see Early Exits tab</div>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1251,9 +1279,9 @@ function AttendanceTable({ c, records, onOpenTeacher, pushToast, clearPunchSheet
                 {col("subject") && <td className="px-4 py-3 whitespace-nowrap" style={{ color: c.inkMuted }}>{r.subject}</td>}
                 {col("firstClass") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkMuted }}>{hourLabel(r.hour)}</td>}
                 {col("deadline") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkMuted }}>{minToLabel(r.deadline)}</td>}
-{col("punch") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: r.status === "OD" ? STATUS_META.OD.fg : c.inkMuted }}>{r.status === "OD" ? "OD" : minToLabel(r.punch)}</td>}
-                {col("delay") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: r.status === "Late" ? STATUS_META.Late.fg : r.status === "OD" ? STATUS_META.OD.fg : c.inkFaint }}>{r.status === "OD" ? "OD" : r.status === "Late" ? `+${r.delay} min` : "—"}</td>}
-                {col("status") && <td className="px-4 py-3 whitespace-nowrap"><Badge status={r.status} /></td>}
+{col("punch") && <td className="px-4 py-3 whitespace-nowrap ff-mono font-semibold" style={{ background: (STATUS_META[r.status] || STATUS_META.Holiday).bg, color: (STATUS_META[r.status] || STATUS_META.Holiday).fg }}>{r.status === "OD" ? "OD" : minToLabel(r.punch)}</td>}
+                {col("delay") && <td className="px-4 py-3 whitespace-nowrap ff-mono font-semibold" style={{ background: (r.earlyExit ? STATUS_META.Absent : (STATUS_META[r.status] || STATUS_META.Holiday)).bg, color: (r.earlyExit ? STATUS_META.Absent : (STATUS_META[r.status] || STATUS_META.Holiday)).fg }}>{r.earlyExit ? `Left ${r.earlyBy}m early` : r.status === "OD" ? "OD" : r.status === "Late" ? `+${r.delay} min` : "—"}</td>}
+                {col("status") && <td className="px-4 py-3 whitespace-nowrap" style={{ background: (STATUS_META[r.status] || STATUS_META.Holiday).bg }}><Badge status={r.status} /></td>}
               </tr>
             ))}
             {filtered.length === 0 && (
@@ -1387,8 +1415,9 @@ function TeacherDrawer({ c, teacherId, onClose, todayRecords, teachers = [] }) {
     const late = working.filter((h) => h.status === "Late").length;
     const absent = working.filter((h) => h.status === "Absent").length;
     const od = working.filter((h) => h.status === "OD").length;
+    const earlyExits = working.filter((h) => h.earlyExit).length;
     const pct = working.length ? Math.round(((present + late + od) / working.length) * 100) : 0;
-    return { workingDays: working.length, present, late, absent, od, pct };
+    return { workingDays: working.length, present, late, absent, od, earlyExits, pct };
   }, [history]);
 
   const chartData = history.slice(-14).map((h) => ({
@@ -1438,8 +1467,10 @@ function TeacherDrawer({ c, teacherId, onClose, todayRecords, teachers = [] }) {
                   <StatMini c={c} label="Late (30d)" value={stats.late} tone={STATUS_META.Late.fg} />
                   <StatMini c={c} label="Absent (30d)" value={stats.absent} tone={STATUS_META.Absent.fg} />
                   <StatMini c={c} label="No of on OD" value={stats.od} tone={STATUS_META.OD.fg} />
+                  <StatMini c={c} label="Early Exits" value={stats.earlyExits} tone={STATUS_META.Absent.fg} />
                   <StatMini c={c} label="OD this month" value={mStats.od} tone={STATUS_META.OD.fg} />
                   <StatMini c={c} label="Late this month" value={mStats.late} tone={STATUS_META.Late.fg} />
+                  <StatMini c={c} label="Early exits this month" value={mStats.earlyExits} tone={STATUS_META.Absent.fg} />
                 </div>
               )}
 
@@ -1592,6 +1623,7 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
       lateCount: late,
       absentCount: absent,
       odCount: od,
+      earlyExitCount: working.filter((r) => r.earlyExit).length,
       avgDelay: delays.length ? Math.round(delays.reduce((a, b) => a + b, 0) / delays.length) : 0,
     };
   }, [scopedRows]);
@@ -1760,7 +1792,7 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
         <div className="rounded-2xl p-5" style={{ background: c.surface, border: `1px solid ${c.border}` }}>
           <h3 className="text-[15px] font-bold" style={{ fontFamily: "'Inter Tight', Inter, sans-serif" }}>{matchedTeacher.name}</h3>
           <p className="text-[12.5px] mt-1" style={{ color: c.inkMuted }}>
-            {matchedTeacher.dept} · {rangeLabel} — <strong style={{ color: STATUS_META.Absent.fg }}>Total Days Absent: {kpis.absentCount}</strong> · <strong style={{ color: STATUS_META.Late.fg }}>Total Times Late: {kpis.lateCount}</strong> · <strong style={{ color: STATUS_META.OD.fg }}>No of on OD: {kpis.odCount}</strong>
+            {matchedTeacher.dept} · {rangeLabel} — <strong style={{ color: STATUS_META.Absent.fg }}>Total Days Absent: {kpis.absentCount}</strong> · <strong style={{ color: STATUS_META.Late.fg }}>Total Times Late: {kpis.lateCount}</strong> · <strong style={{ color: STATUS_META.OD.fg }}>No of on OD: {kpis.odCount}</strong> · <strong style={{ color: STATUS_META.Absent.fg }}>Early Exits: {kpis.earlyExitCount}</strong>
           </p>
         </div>
       )}
@@ -1774,6 +1806,7 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
           <KpiCard c={c} label="Late %" value={`${kpis.latePct}%`} tone={STATUS_META.Late.fg} />
           <KpiCard c={c} label="Absent %" value={`${kpis.absentPct}%`} tone={STATUS_META.Absent.fg} />
           <KpiCard c={c} label="Times late" value={kpis.lateCount} tone={STATUS_META.Late.fg} />
+          <KpiCard c={c} label="Early Exits" value={kpis.earlyExitCount} tone={STATUS_META.Absent.fg} />
           <KpiCard c={c} label="Avg delay" value={`${kpis.avgDelay}m`} />
         </div>
       </div>
@@ -2142,11 +2175,12 @@ function TeacherSearch({ c, todayRecords, teachers = [] }) {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-4 gap-2.5">
+                <div className="grid grid-cols-5 gap-2.5">
                   <StatMini c={c} label="Attendance" value={`${ms.pct}%`} tone={c.brand} />
                   <StatMini c={c} label="Present" value={ms.present} tone={STATUS_META.Present.fg} />
                   <StatMini c={c} label="Absent" value={ms.absent} tone={STATUS_META.Absent.fg} />
                   <StatMini c={c} label="Leave" value={ms.leave} tone={STATUS_META.Leave.fg} />
+                  <StatMini c={c} label="Early Exits" value={ms.earlyExits} tone={STATUS_META.Absent.fg} />
                 </div>
 
                 <div>
