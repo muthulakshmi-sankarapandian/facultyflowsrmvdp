@@ -1278,9 +1278,9 @@ function AttendanceTable({ c, records, onOpenTeacher, pushToast, clearPunchSheet
                 {col("subject") && <td className="px-4 py-3 whitespace-nowrap" style={{ color: c.inkMuted }}>{r.subject}</td>}
                 {col("firstClass") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkMuted }}>{hourLabel(r.hour)}</td>}
                 {col("deadline") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkMuted }}>{minToLabel(r.deadline)}</td>}
-{col("punch") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: r.status === "OD" ? STATUS_META.OD.fg : c.inkMuted }}>{r.status === "OD" ? "OD" : minToLabel(r.punch)}</td>}
-                {col("delay") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: r.status === "Late" ? STATUS_META.Late.fg : r.status === "OD" ? STATUS_META.OD.fg : c.inkFaint }}>{r.status === "OD" ? "OD" : r.status === "Late" ? `+${r.delay} min` : "—"}</td>}
-                {col("status") && <td className="px-4 py-3 whitespace-nowrap"><Badge status={r.status} /></td>}
+{col("punch") && <td className="px-4 py-3 whitespace-nowrap ff-mono font-semibold" style={{ background: (STATUS_META[r.status] || STATUS_META.Holiday).bg, color: (STATUS_META[r.status] || STATUS_META.Holiday).fg }}>{r.status === "OD" ? "OD" : minToLabel(r.punch)}</td>}
+                {col("delay") && <td className="px-4 py-3 whitespace-nowrap ff-mono font-semibold" style={{ background: (r.earlyExit ? STATUS_META.Absent : (STATUS_META[r.status] || STATUS_META.Holiday)).bg, color: (r.earlyExit ? STATUS_META.Absent : (STATUS_META[r.status] || STATUS_META.Holiday)).fg }}>{r.earlyExit ? `Left ${r.earlyBy}m early` : r.status === "OD" ? "OD" : r.status === "Late" ? `+${r.delay} min` : "—"}</td>}
+                {col("status") && <td className="px-4 py-3 whitespace-nowrap" style={{ background: (STATUS_META[r.status] || STATUS_META.Holiday).bg }}><Badge status={r.status} /></td>}
               </tr>
             ))}
             {filtered.length === 0 && (
