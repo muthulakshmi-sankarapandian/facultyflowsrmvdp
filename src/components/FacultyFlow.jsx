@@ -1792,7 +1792,7 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
         <div className="rounded-2xl p-5" style={{ background: c.surface, border: `1px solid ${c.border}` }}>
           <h3 className="text-[15px] font-bold" style={{ fontFamily: "'Inter Tight', Inter, sans-serif" }}>{matchedTeacher.name}</h3>
           <p className="text-[12.5px] mt-1" style={{ color: c.inkMuted }}>
-            {matchedTeacher.dept} · {rangeLabel} — <strong style={{ color: STATUS_META.Absent.fg }}>Total Days Absent: {kpis.absentCount}</strong> · <strong style={{ color: STATUS_META.Late.fg }}>Total Times Late: {kpis.lateCount}</strong> · <strong style={{ color: STATUS_META.OD.fg }}>No of on OD: {kpis.odCount}</strong>
+            {matchedTeacher.dept} · {rangeLabel} — <strong style={{ color: STATUS_META.Absent.fg }}>Total Days Absent: {kpis.absentCount}</strong> · <strong style={{ color: STATUS_META.Late.fg }}>Total Times Late: {kpis.lateCount}</strong> · <strong style={{ color: STATUS_META.OD.fg }}>No of on OD: {kpis.odCount}</strong> · <strong style={{ color: STATUS_META.Absent.fg }}>Early Exits: {kpis.earlyExitCount}</strong>
           </p>
         </div>
       )}
@@ -1806,6 +1806,7 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
           <KpiCard c={c} label="Late %" value={`${kpis.latePct}%`} tone={STATUS_META.Late.fg} />
           <KpiCard c={c} label="Absent %" value={`${kpis.absentPct}%`} tone={STATUS_META.Absent.fg} />
           <KpiCard c={c} label="Times late" value={kpis.lateCount} tone={STATUS_META.Late.fg} />
+          <KpiCard c={c} label="Early Exits" value={kpis.earlyExitCount} tone={STATUS_META.Absent.fg} />
           <KpiCard c={c} label="Avg delay" value={`${kpis.avgDelay}m`} />
         </div>
       </div>
@@ -2174,7 +2175,7 @@ function TeacherSearch({ c, todayRecords, teachers = [] }) {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-4 gap-2.5">
+                <div className="grid grid-cols-5 gap-2.5">
                   <StatMini c={c} label="Attendance" value={`${ms.pct}%`} tone={c.brand} />
                   <StatMini c={c} label="Present" value={ms.present} tone={STATUS_META.Present.fg} />
                   <StatMini c={c} label="Absent" value={ms.absent} tone={STATUS_META.Absent.fg} />
