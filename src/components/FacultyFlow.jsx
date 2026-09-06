@@ -442,20 +442,21 @@ function buildRecords(tt, punchMap, date, nowMin, settings, outMap) {
 function monthStats(teacherId, todayRecord) {
   const now = new Date();
   const rows = historyRows().filter((r) => r.id === teacherId && r.date.getMonth() === now.getMonth() && r.date.getFullYear() === now.getFullYear());
-  if (todayRecord && !rows.some((r) => dayKey(r.date) === dayKey(now))) rows.push({ date: now, status: todayRecord.status, delay: todayRecord.delay });
+  if (todayRecord && !rows.some((r) => dayKey(r.date) === dayKey(now))) rows.push({ date: now, status: todayRecord.status, delay: todayRecord.delay, earlyExit: !!todayRecord.earlyExit });
   const working = rows.filter((r) => r.status !== "Holiday");
   const lateRows = rows.filter((r) => r.status === "Late");
     const present = rows.filter((r) => r.status === "Present").length;
     const absent = rows.filter((r) => r.status === "Absent").length;
     const leave = rows.filter((r) => r.status === "Leave").length;
     const od = rows.filter((r) => r.status === "OD").length;
+    const earlyExits = rows.filter((r) => r.earlyExit).length;
     const totalLateMin = lateRows.reduce((a, b) => a + (b.delay || 0), 0);
     return {
       month: now.toLocaleDateString("en-IN", { month: "long", year: "numeric" }),
       rows, lateRows,
       workingDays: working.length,
       late: lateRows.length,
-      present, absent, leave, od,
+      present, absent, leave, od, earlyExits,
       pct: working.length ? Math.round(((present + lateRows.length + od) / working.length) * 100) : 0,
     avgLate: lateRows.length ? Math.round(totalLateMin / lateRows.length) : 0,
     totalLateMin,
