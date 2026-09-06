@@ -1415,8 +1415,9 @@ function TeacherDrawer({ c, teacherId, onClose, todayRecords, teachers = [] }) {
     const late = working.filter((h) => h.status === "Late").length;
     const absent = working.filter((h) => h.status === "Absent").length;
     const od = working.filter((h) => h.status === "OD").length;
+    const earlyExits = working.filter((h) => h.earlyExit).length;
     const pct = working.length ? Math.round(((present + late + od) / working.length) * 100) : 0;
-    return { workingDays: working.length, present, late, absent, od, pct };
+    return { workingDays: working.length, present, late, absent, od, earlyExits, pct };
   }, [history]);
 
   const chartData = history.slice(-14).map((h) => ({
@@ -1466,8 +1467,10 @@ function TeacherDrawer({ c, teacherId, onClose, todayRecords, teachers = [] }) {
                   <StatMini c={c} label="Late (30d)" value={stats.late} tone={STATUS_META.Late.fg} />
                   <StatMini c={c} label="Absent (30d)" value={stats.absent} tone={STATUS_META.Absent.fg} />
                   <StatMini c={c} label="No of on OD" value={stats.od} tone={STATUS_META.OD.fg} />
+                  <StatMini c={c} label="Early Exits" value={stats.earlyExits} tone={STATUS_META.Absent.fg} />
                   <StatMini c={c} label="OD this month" value={mStats.od} tone={STATUS_META.OD.fg} />
                   <StatMini c={c} label="Late this month" value={mStats.late} tone={STATUS_META.Late.fg} />
+                  <StatMini c={c} label="Early exits this month" value={mStats.earlyExits} tone={STATUS_META.Absent.fg} />
                 </div>
               )}
 
@@ -1620,6 +1623,7 @@ function HistoryPage({ c, onOpenTeacher, pushToast, teachers = [], refreshKey, t
       lateCount: late,
       absentCount: absent,
       odCount: od,
+      earlyExitCount: working.filter((r) => r.earlyExit).length,
       avgDelay: delays.length ? Math.round(delays.reduce((a, b) => a + b, 0) / delays.length) : 0,
     };
   }, [scopedRows]);
@@ -2175,6 +2179,7 @@ function TeacherSearch({ c, todayRecords, teachers = [] }) {
                   <StatMini c={c} label="Present" value={ms.present} tone={STATUS_META.Present.fg} />
                   <StatMini c={c} label="Absent" value={ms.absent} tone={STATUS_META.Absent.fg} />
                   <StatMini c={c} label="Leave" value={ms.leave} tone={STATUS_META.Leave.fg} />
+                  <StatMini c={c} label="Early Exits" value={ms.earlyExits} tone={STATUS_META.Absent.fg} />
                 </div>
 
                 <div>
