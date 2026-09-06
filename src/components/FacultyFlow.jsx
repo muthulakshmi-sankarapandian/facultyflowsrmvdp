@@ -144,7 +144,7 @@ function writeHistoryStore(store) {
 function saveHistoryDay(key, records) {
   if (!records.length) return;
   const store = loadHistoryStore();
-  store[key] = records.map((r) => ({ id: r.id, teacher: r.name, dept: r.dept, status: r.status, delay: r.delay, deadline: r.deadline, punch: r.punch }));
+  store[key] = records.map((r) => ({ id: r.id, teacher: r.name, dept: r.dept, status: r.status, delay: r.delay, deadline: r.deadline, punch: r.punch, lastOut: r.lastOut ?? null, earlyExit: !!r.earlyExit }));
   writeHistoryStore(store);
 }
 function deleteHistoryDay(key) {
@@ -403,7 +403,7 @@ function mergeHistoryDay(key, records) {
   const store = loadHistoryStore();
   const byId = {};
   (store[key] || []).forEach((r) => { byId[r.id] = r; });
-  records.forEach((r) => { byId[r.id] = { id: r.id, teacher: r.name, dept: r.dept, status: r.status, delay: r.delay, deadline: r.deadline, punch: r.punch }; });
+  records.forEach((r) => { byId[r.id] = { id: r.id, teacher: r.name, dept: r.dept, status: r.status, delay: r.delay, deadline: r.deadline, punch: r.punch, lastOut: r.lastOut ?? null, earlyExit: !!r.earlyExit }; });
   store[key] = Object.values(byId);
   writeHistoryStore(store);
   return records.length;
@@ -423,8 +423,8 @@ function buildRecords(tt, punchMap, date, nowMin, settings, outMap) {
       const deadline = deadlineForHour(hour, st);
       const raw = punchMap[t.id];
       const isOD = raw === "OD";
-      const punch = raw == null || isOD ? null : raw;
-      const status = blocked ? "Holiday" : isOD ? "OD" : punch != null ? (punch <= deadline ? "Present" : "Late") : nowMin >= deadline ? "Absent" : "Waiting";
+      const punch = raw == null || isOD || !Number.isFinite(raw) ? null : raw;
+      const status = blocked ? "Holiday" : isOD ? "OD" : punch != null ? (punch <= deadline ? "Present" : "Late") : "Absent";
       const lastHour = tt.lastTimetable?.[t.id]?.[wd] ?? hour;
       const endMin = classEndMin(lastHour);
       const lastOut = outMap?.[t.id] ?? null;
