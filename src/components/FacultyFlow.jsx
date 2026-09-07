@@ -2077,27 +2077,19 @@ function TeacherSearch({ c, todayRecords, teachers = [] }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState(null);
-  const wrapperRef = useRef(null);
-
-  useEffect(() => {
-    function onDown(e) {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setOpen(false);
-    }
-    if (open) document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [open]);
 
   const matches = useMemo(() => {
     const s = q.trim().toLowerCase();
     if (!s) return [];
-    return teachers.filter((t) => t.name.toLowerCase().includes(s) || (t.dept || "").toLowerCase().includes(s)).slice(0, 8);
+    return teachers.filter((t) => t.name.toLowerCase().includes(s) || (t.dept || "").toLowerCase().includes(s)).slice(0, 6);
   }, [q, teachers]);
 
   const today = selected ? todayRecords.find((r) => r.id === selected.id) : null;
   const ms = useMemo(() => (selected ? monthStats(selected.id, today) : null), [selected, today]);
 
+
   return (
-    <div ref={wrapperRef} className="relative w-full">
+    <div className="relative w-full">
       <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: c.inkFaint }} />
       <input
         value={q}
@@ -2112,8 +2104,8 @@ function TeacherSearch({ c, todayRecords, teachers = [] }) {
         {open && matches.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-            className="absolute top-full left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto bg-white shadow-lg border rounded-lg py-1"
-            style={{ borderColor: c.border }}
+            className="absolute left-0 right-0 mt-1.5 rounded-xl p-1.5 z-50"
+            style={{ background: c.surface, border: `1px solid ${c.border}`, boxShadow: "0 12px 30px rgba(0,0,0,.14)" }}
           >
             {matches.map((t) => {
               const m = monthStats(t.id, todayRecords.find((r) => r.id === t.id));
@@ -2121,8 +2113,10 @@ function TeacherSearch({ c, todayRecords, teachers = [] }) {
                 <button
                   key={t.id}
                   onClick={() => { setSelected(t); setOpen(false); setQ(t.name); }}
-                  className="w-full flex items-center gap-3 px-3 py-1.5 text-left hover:bg-gray-100"
+                  className="w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-left"
                   style={{ color: c.ink }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = c.surfaceAlt)}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                 >
                   <div className="min-w-0 flex-1">
                     <div className="text-[12.5px] font-semibold truncate">{t.name}</div>
