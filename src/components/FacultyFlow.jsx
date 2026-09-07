@@ -841,12 +841,12 @@ function TopHeader({ c, clock, lastSync, summary, themeMode, setThemeMode, onMen
 
 function Dashboard({ c, records, summary, onOpenTeacher, pushToast, syncNow, lastSync, watchConnected, setWatchConnected, sources, clearPunchSheet, applyPunchUpload, applyTimetableUpload, teachers }) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="md:hidden">
         <TeacherSearch c={c} todayRecords={records} teachers={teachers} />
       </div>
-      <AttendanceTable c={c} records={records} onOpenTeacher={onOpenTeacher} pushToast={pushToast} clearPunchSheet={clearPunchSheet} />
       <SummarySection c={c} summary={summary} records={records} onOpenTeacher={onOpenTeacher} />
+      <AttendanceTable c={c} records={records} onOpenTeacher={onOpenTeacher} pushToast={pushToast} clearPunchSheet={clearPunchSheet} />
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
         <AttentionPanel c={c} records={records} onOpenTeacher={onOpenTeacher} />
         <UploadCard c={c} pushToast={pushToast} syncNow={syncNow} lastSync={lastSync}
@@ -862,13 +862,11 @@ function Dashboard({ c, records, summary, onOpenTeacher, pushToast, syncNow, las
 function SummarySection({ c, summary, records = [], onOpenTeacher }) {
   const earlyExitRows = records.filter((r) => r.earlyExit).sort((a, b) => (b.earlyBy || 0) - (a.earlyBy || 0));
   const cards = [
-    { label: "Scheduled", value: summary.scheduled, icon: CalendarIcon, tone: c.ink },
-    { label: "Present", value: summary.present, icon: CheckCircle2, tone: STATUS_META.Present.fg },
+    { label: "On Time", value: summary.present, icon: CheckCircle2, tone: STATUS_META.Present.fg },
     { label: "Late", value: summary.late, icon: Clock, tone: STATUS_META.Late.fg },
     { label: "Absent", value: summary.absent, icon: XCircle, tone: STATUS_META.Absent.fg },
-    { label: "On Duty", value: summary.od, icon: Coffee, tone: STATUS_META.OD.fg },
+    { label: "OD", value: summary.od, icon: Coffee, tone: STATUS_META.OD.fg },
     { label: "Early Exits", value: summary.earlyExits ?? 0, icon: LogOut, tone: STATUS_META.Absent.fg },
-    { label: "Waiting", value: summary.waiting, icon: Timer, tone: STATUS_META.Waiting.fg },
   ];
   const segs = [
     { label: "Present", v: summary.present, color: STATUS_META.Present.dot },
@@ -880,39 +878,39 @@ function SummarySection({ c, summary, records = [], onOpenTeacher }) {
   const total = Math.max(segs.reduce((s, x) => s + x.v, 0), 1);
 
   return (
-    <div className="rounded-2xl p-5 sm:p-6" style={{ background: c.surface, border: `1px solid ${c.border}`, boxShadow: "0 1px 2px rgba(0,0,0,.03)" }}>
-      <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
+    <div className="rounded-xl p-4" style={{ background: c.surface, border: `1px solid ${c.border}`, boxShadow: "0 1px 2px rgba(0,0,0,.03)" }}>
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
         <div>
           <h2 className="text-[16px] font-bold" style={{ fontFamily: "'Inter Tight', Inter, sans-serif" }}>Attendance overview</h2>
           <p className="text-[13px]" style={{ color: c.inkFaint }}>{summary.scheduled} teachers scheduled today</p>
         </div>
         <div className="text-right">
-          <div className="text-[28px] font-extrabold leading-none ff-mono" style={{ color: c.brand, fontFamily: "'Inter Tight', Inter, sans-serif" }}>{summary.pct}%</div>
+          <div className="text-[24px] font-extrabold leading-none ff-mono" style={{ color: c.brand, fontFamily: "'Inter Tight', Inter, sans-serif" }}>{summary.pct}%</div>
           <div className="text-[11px] font-medium" style={{ color: c.inkFaint }}>attendance rate</div>
         </div>
       </div>
 
-      <div className="flex h-2.5 w-full rounded-full overflow-hidden mb-6" style={{ background: c.surfaceAlt }}>
+      <div className="flex h-2 w-full rounded-full overflow-hidden mb-3" style={{ background: c.surfaceAlt }}>
         {segs.map((s, i) => (
           <motion.div key={s.label} initial={{ width: 0 }} animate={{ width: `${(s.v / total) * 100}%` }}
             transition={{ duration: 0.5, delay: i * 0.05 }} style={{ background: s.color }} title={`${s.label}: ${s.v}`} />
         ))}
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
         {cards.map((cd) => (
-          <div key={cd.label} className="rounded-xl p-3.5" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}` }}>
-            <div className="flex items-center gap-1.5 mb-2">
+          <div key={cd.label} className="rounded-lg px-3 py-2.5" style={{ background: c.surfaceAlt, border: `1px solid ${c.border}` }}>
+            <div className="flex items-center gap-1.5 mb-1">
               <cd.icon size={14} style={{ color: cd.tone }} />
               <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: c.inkFaint }}>{cd.label}</span>
             </div>
-            <div className="text-[22px] font-extrabold ff-mono" style={{ color: cd.tone, fontFamily: "'Inter Tight', Inter, sans-serif" }}>{cd.value}</div>
+            <div className="text-[20px] font-extrabold ff-mono" style={{ color: cd.tone, fontFamily: "'Inter Tight', Inter, sans-serif" }}>{cd.value}</div>
           </div>
         ))}
       </div>
 
       {earlyExitRows.length > 0 && (
-        <div className="mt-5 rounded-xl p-4" style={{ background: STATUS_META.Absent.bg, border: `1px solid ${STATUS_META.Absent.fg}33` }}>
+        <div className="mt-3 rounded-lg p-3" style={{ background: STATUS_META.Absent.bg, border: `1px solid ${STATUS_META.Absent.fg}33` }}>
           <div className="flex items-center gap-1.5 mb-2.5">
             <LogOut size={13} style={{ color: STATUS_META.Absent.fg }} />
             <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: STATUS_META.Absent.fg }}>Early exits today · {earlyExitRows.length}</span>
@@ -1094,6 +1092,7 @@ const TABLE_COLS = [
   { key: "firstClass", label: "First Class" },
   { key: "deadline", label: "Reporting Deadline" },
   { key: "punch", label: "Punch Time" },
+  { key: "lastOut", label: "Punch Out" },
   { key: "delay", label: "Delay" },
   { key: "status", label: "Status" },
 ];
@@ -1254,36 +1253,38 @@ function AttendanceTable({ c, records, onOpenTeacher, pushToast, clearPunchSheet
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-[12.5px]">
+      <div className="max-h-[62vh] overflow-auto">
+        <table className="w-full text-xs border-separate border-spacing-0">
           <thead>
-            <tr style={{ background: c.surfaceAlt }}>
+            <tr>
               {col("name") && <Th c={c} label="Teacher" onClick={() => toggleSort("name")} active={sortKey === "name"} dir={sortDir} sticky />}
               {col("dept") && <Th c={c} label="Department" onClick={() => toggleSort("dept")} active={sortKey === "dept"} dir={sortDir} />}
               {col("subject") && <Th c={c} label="Subject" onClick={() => toggleSort("subject")} active={sortKey === "subject"} dir={sortDir} />}
               {col("firstClass") && <Th c={c} label="First Class" />}
               {col("deadline") && <Th c={c} label="Deadline" onClick={() => toggleSort("deadline")} active={sortKey === "deadline"} dir={sortDir} />}
               {col("punch") && <Th c={c} label="Punch Time" onClick={() => toggleSort("punch")} active={sortKey === "punch"} dir={sortDir} />}
+              {col("lastOut") && <Th c={c} label="Punch Out" onClick={() => toggleSort("lastOut")} active={sortKey === "lastOut"} dir={sortDir} />}
               {col("delay") && <Th c={c} label="Delay" />}
               {col("status") && <Th c={c} label="Status" onClick={() => toggleSort("status")} active={sortKey === "status"} dir={sortDir} />}
             </tr>
           </thead>
           <tbody>
-            {filtered.map((r) => (
-              <tr key={r.id} onClick={() => onOpenTeacher(r.id)} className="cursor-pointer transition-colors"
-                style={{ borderTop: `1px solid ${c.border}` }}
-                onMouseEnter={(e) => e.currentTarget.style.background = c.surfaceAlt}
-                onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
-                {col("name") && <td className="px-4 py-3 font-semibold whitespace-nowrap">{r.name}</td>}
-                {col("dept") && <td className="px-4 py-3 whitespace-nowrap" style={{ color: c.inkMuted }}>{r.dept}</td>}
-                {col("subject") && <td className="px-4 py-3 whitespace-nowrap" style={{ color: c.inkMuted }}>{r.subject}</td>}
-                {col("firstClass") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkMuted }}>{hourLabel(r.hour)}</td>}
-                {col("deadline") && <td className="px-4 py-3 whitespace-nowrap ff-mono" style={{ color: c.inkMuted }}>{minToLabel(r.deadline)}</td>}
-{col("punch") && <td className="px-4 py-3 whitespace-nowrap ff-mono font-semibold" style={{ background: (STATUS_META[r.status] || STATUS_META.Holiday).bg, color: (STATUS_META[r.status] || STATUS_META.Holiday).fg }}>{r.status === "OD" ? "OD" : minToLabel(r.punch)}</td>}
-                {col("delay") && <td className="px-4 py-3 whitespace-nowrap ff-mono font-semibold" style={{ background: (r.earlyExit ? STATUS_META.Absent : (STATUS_META[r.status] || STATUS_META.Holiday)).bg, color: (r.earlyExit ? STATUS_META.Absent : (STATUS_META[r.status] || STATUS_META.Holiday)).fg }}>{r.earlyExit ? `Left ${r.earlyBy}m early` : r.status === "OD" ? "OD" : r.status === "Late" ? `+${r.delay} min` : "—"}</td>}
-                {col("status") && <td className="px-4 py-3 whitespace-nowrap" style={{ background: (STATUS_META[r.status] || STATUS_META.Holiday).bg }}><Badge status={r.status} /></td>}
-              </tr>
-            ))}
+            {filtered.map((r) => {
+              const meta = r.earlyExit ? STATUS_META.Absent : (STATUS_META[r.status] || STATUS_META.Holiday);
+              return (
+                <tr key={r.id} onClick={() => onOpenTeacher(r.id)} className="cursor-pointer transition-[filter] hover:brightness-[0.97]" style={{ background: meta.bg, color: c.ink }}>
+                  {col("name") && <td className="px-3 py-2 font-semibold whitespace-nowrap border-t" style={{ borderColor: c.surface }}>{r.name}</td>}
+                  {col("dept") && <td className="px-3 py-2 border-t" style={{ borderColor: c.surface, color: c.inkMuted }}><div className="max-w-[200px] truncate" title={r.dept}>{r.dept}</div></td>}
+                  {col("subject") && <td className="px-3 py-2 whitespace-nowrap border-t" style={{ borderColor: c.surface, color: c.inkMuted }}>{r.subject}</td>}
+                  {col("firstClass") && <td className="px-3 py-2 whitespace-nowrap ff-mono border-t" style={{ borderColor: c.surface, color: c.inkMuted }}>{hourLabel(r.hour)}</td>}
+                  {col("deadline") && <td className="px-3 py-2 whitespace-nowrap ff-mono border-t" style={{ borderColor: c.surface, color: c.inkMuted }}>{minToLabel(r.deadline)}</td>}
+                  {col("punch") && <td className="px-3 py-2 whitespace-nowrap ff-mono font-semibold border-t" style={{ borderColor: c.surface, color: meta.fg }}>{r.status === "OD" ? "OD" : minToLabel(r.punch)}</td>}
+                  {col("lastOut") && <td className="px-3 py-2 whitespace-nowrap ff-mono font-semibold border-t" style={{ borderColor: c.surface, color: r.earlyExit ? STATUS_META.Absent.fg : c.inkMuted }}>{r.status === "OD" ? "OD" : minToLabel(r.lastOut)}</td>}
+                  {col("delay") && <td className="px-3 py-2 whitespace-nowrap ff-mono font-semibold border-t" style={{ borderColor: c.surface, color: meta.fg }}>{r.earlyExit ? `Left ${r.earlyBy}m early` : r.status === "OD" ? "OD" : r.status === "Late" ? `+${r.delay} min` : "—"}</td>}
+                  {col("status") && <td className="px-3 py-2 whitespace-nowrap border-t" style={{ borderColor: c.surface }}><Badge status={r.status} /></td>}
+                </tr>
+              );
+            })}
             {filtered.length === 0 && (
               <tr><td colSpan={8} className="text-center py-12" style={{ color: c.inkFaint }}>{records.length === 0 ? "No punch data. Upload today's punch sheet to begin." : "No teachers match your search."}</td></tr>
             )}
@@ -1301,8 +1302,8 @@ function AttendanceTable({ c, records, onOpenTeacher, pushToast, clearPunchSheet
 function Th({ c, label, onClick, active, dir, sticky }) {
   return (
     <th onClick={onClick}
-      className={`px-4 py-2.5 text-left text-[10.5px] font-bold uppercase tracking-wide whitespace-nowrap ${onClick ? "cursor-pointer select-none" : ""}`}
-      style={{ color: active ? c.brand : c.inkFaint }}>
+      className={`sticky top-0 z-10 px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide whitespace-nowrap ${onClick ? "cursor-pointer select-none" : ""}`}
+      style={{ color: active ? c.brand : c.inkFaint, background: c.surfaceAlt, borderBottom: `1px solid ${c.border}` }}>
       <span className="inline-flex items-center gap-1">
         {label}
         {onClick && (active ? (dir === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />) : <ChevronsUpDown size={11} style={{ opacity: 0.5 }} />)}
