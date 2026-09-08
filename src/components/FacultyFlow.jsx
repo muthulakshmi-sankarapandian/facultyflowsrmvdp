@@ -798,7 +798,7 @@ function TopHeader({ c, clock, lastSync, summary, themeMode, setThemeMode, onMen
           <div className="text-[12px] leading-tight" style={{ color: c.inkFaint }}>{dateLabel(clock)}</div>
         </div>
 
-        <div className="hidden md:block ml-6 flex-1 max-w-sm">
+        <div className="hidden md:block ml-6 flex-1 max-w-sm relative">
           <TeacherSearch c={c} todayRecords={todayRecords} teachers={teachers} />
         </div>
 
@@ -842,7 +842,7 @@ function TopHeader({ c, clock, lastSync, summary, themeMode, setThemeMode, onMen
 function Dashboard({ c, records, summary, onOpenTeacher, pushToast, syncNow, lastSync, watchConnected, setWatchConnected, sources, clearPunchSheet, applyPunchUpload, applyTimetableUpload, teachers }) {
   return (
     <div className="space-y-4">
-      <div className="md:hidden">
+      <div className="md:hidden relative">
         <TeacherSearch c={c} todayRecords={records} teachers={teachers} />
       </div>
       <SummarySection c={c} summary={summary} records={records} onOpenTeacher={onOpenTeacher} />
