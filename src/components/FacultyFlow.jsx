@@ -2073,6 +2073,8 @@ function ToastStack({ c, toasts }) {
 }
 /* ------------------------------ TEACHER SEARCH -------------------------------- */
 
+/* ------------------------------ TEACHER SEARCH -------------------------------- */
+
 function TeacherSearch({ c, todayRecords, teachers = [] }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
@@ -2113,15 +2115,16 @@ function TeacherSearch({ c, todayRecords, teachers = [] }) {
           <motion.div
             initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
             className="absolute top-full left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto bg-white shadow-lg border rounded-lg py-1"
-            style={{ borderColor: c.border }}
+            style={{ borderColor: c.border, background: c.surface }}
           >
             {matches.map((t) => {
-              const m = monthStats(t.id, todayRecords.find((r) => r.id === t.id));
+              const rec = todayRecords.find((r) => r.id === t.id);
+              const m = monthStats(t.id, rec);
               return (
                 <button
                   key={t.id}
                   onClick={() => { setSelected(t); setOpen(false); setQ(t.name); }}
-                  className="w-full flex items-center gap-3 px-3 py-1.5 text-left hover:bg-gray-100"
+                  className="w-full flex items-center gap-3 px-3 py-2 text-left transition-colors hover:opacity-80"
                   style={{ color: c.ink }}
                 >
                   <div className="min-w-0 flex-1">
