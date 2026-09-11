@@ -798,10 +798,6 @@ function TopHeader({ c, clock, lastSync, summary, themeMode, setThemeMode, onMen
           <div className="text-[12px] leading-tight" style={{ color: c.inkFaint }}>{dateLabel(clock)}</div>
         </div>
 
-        <div className="hidden md:block ml-6 flex-1 max-w-sm relative">
-          <TeacherSearch c={c} todayRecords={todayRecords} teachers={teachers} />
-        </div>
-
         <div className="ml-auto flex items-center gap-2 sm:gap-4">
           <div className="hidden md:flex items-center gap-4 pr-4 mr-1" style={{ borderRight: `1px solid ${c.border}` }}>
             <div className="text-right">
@@ -1939,7 +1935,7 @@ function ChartCard({ c, title, children }) {
 
 function SettingsPage({ c, themeMode, setThemeMode, pushToast, settings, updateSettings }) {
   const s = settings || DEFAULT_SETTINGS;
-  const workingDays = s.workingDays, holidays = s.holidays, exportFmt = s.exportFmt;
+  const workingDays = s.workingDays, holidays = s.holidays;
   const [newHoliday, setNewHoliday] = useState({ date: "", name: "" });
   const IMPORT_LABELS = [["dedupe", "Ignore duplicate punches"], ["skipBlank", "Ignore blank rows"], ["earliest", "Use earliest punch of the day"], ["caseInsensitive", "Case-insensitive teacher matching"]];
   const addHoliday = () => {
@@ -2020,16 +2016,6 @@ function SettingsPage({ c, themeMode, setThemeMode, pushToast, settings, updateS
           ))}
         </div>
       </Section>
-
-      <Section title="Export preferences" icon={FileSpreadsheet} desc="Default format for downloaded reports.">
-        <div className="flex gap-2">
-          {["Excel", "CSV", "PDF"].map((f) => (
-            <button key={f} onClick={() => updateSettings({ exportFmt: f })} className="px-3 py-1.5 rounded-lg text-[12px] font-semibold"
-              style={{ background: exportFmt === f ? c.brand : c.surfaceAlt, color: exportFmt === f ? "#fff" : c.inkMuted }}>{f}</button>
-          ))}
-        </div>
-      </Section>
-
 
       <Section title="Theme" icon={Sun}>
         <div className="flex gap-2">
