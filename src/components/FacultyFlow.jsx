@@ -144,7 +144,7 @@ function writeHistoryStore(store) {
 function saveHistoryDay(key, records) {
   if (!records.length) return;
   const store = loadHistoryStore();
-  store[key] = records.map((r) => ({ id: r.id, teacher: r.name, dept: r.dept, status: r.status, delay: r.delay, deadline: r.deadline, punch: r.punch, lastOut: r.lastOut ?? null, earlyExit: !!r.earlyExit }));
+  store[key] = records.map((r) => ({ id: r.id, teacher: r.name, dept: r.dept, status: r.status, delay: r.delay, deadline: r.deadline, punch: r.punch, lastOut: r.lastOut ?? null, earlyExit: !!r.earlyExit, endMin: r.endMin ?? null, earlyBy: r.earlyBy ?? null }));
   writeHistoryStore(store);
 }
 function deleteHistoryDay(key) {
