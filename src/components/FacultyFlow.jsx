@@ -660,7 +660,7 @@ export default function FacultyFlowApp() {
                 <motion.div key="dash" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}>
                   <Dashboard c={c} records={todayRecords} summary={summary} onOpenTeacher={setDrawerTeacher}
                     pushToast={pushToast} syncNow={syncNow} lastSync={lastSync} watchConnected={watchConnected}
-                    setWatchConnected={setWatchConnected} sources={sources} teachers={teachers}
+                    setWatchConnected={setWatchConnected} sources={sources} teachers={teachers} setPage={setPage} refreshKey={historyKey} clock={clock}
                     clearPunchSheet={clearPunchSheet} applyPunchUpload={applyPunchUpload} applyTimetableUpload={applyTimetableUpload} />
                 </motion.div>
               )}
@@ -672,7 +672,7 @@ export default function FacultyFlowApp() {
               )}
               {page === "earlyexits" && (
                 <motion.div key="early" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}>
-                  <EarlyExitsPage c={c} records={todayRecords} clock={clock} onOpenTeacher={setDrawerTeacher} hasData={!!tt && !!punchMap} />
+                  <EarlyExitsPage c={c} records={todayRecords} clock={clock} onOpenTeacher={setDrawerTeacher} hasData={!!tt && !!punchMap} refreshKey={historyKey} />
                 </motion.div>
               )}
               {page === "settings" && (
