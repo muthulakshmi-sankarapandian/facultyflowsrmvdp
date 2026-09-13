@@ -144,7 +144,7 @@ function writeHistoryStore(store) {
 function saveHistoryDay(key, records) {
   if (!records.length) return;
   const store = loadHistoryStore();
-  store[key] = records.map((r) => ({ id: r.id, teacher: r.name, dept: r.dept, status: r.status, delay: r.delay, deadline: r.deadline, punch: r.punch, lastOut: r.lastOut ?? null, earlyExit: !!r.earlyExit }));
+  store[key] = records.map((r) => ({ id: r.id, teacher: r.name, dept: r.dept, status: r.status, delay: r.delay, deadline: r.deadline, punch: r.punch, lastOut: r.lastOut ?? null, earlyExit: !!r.earlyExit, endMin: r.endMin ?? null, earlyBy: r.earlyBy ?? null }));
   writeHistoryStore(store);
 }
 function deleteHistoryDay(key) {
@@ -403,7 +403,7 @@ function mergeHistoryDay(key, records) {
   const store = loadHistoryStore();
   const byId = {};
   (store[key] || []).forEach((r) => { byId[r.id] = r; });
-  records.forEach((r) => { byId[r.id] = { id: r.id, teacher: r.name, dept: r.dept, status: r.status, delay: r.delay, deadline: r.deadline, punch: r.punch, lastOut: r.lastOut ?? null, earlyExit: !!r.earlyExit }; });
+  records.forEach((r) => { byId[r.id] = { id: r.id, teacher: r.name, dept: r.dept, status: r.status, delay: r.delay, deadline: r.deadline, punch: r.punch, lastOut: r.lastOut ?? null, earlyExit: !!r.earlyExit, endMin: r.endMin ?? null, earlyBy: r.earlyBy ?? null }; });
   store[key] = Object.values(byId);
   writeHistoryStore(store);
   return records.length;
@@ -660,7 +660,7 @@ export default function FacultyFlowApp() {
                 <motion.div key="dash" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}>
                   <Dashboard c={c} records={todayRecords} summary={summary} onOpenTeacher={setDrawerTeacher}
                     pushToast={pushToast} syncNow={syncNow} lastSync={lastSync} watchConnected={watchConnected}
-                    setWatchConnected={setWatchConnected} sources={sources} teachers={teachers}
+                    setWatchConnected={setWatchConnected} sources={sources} teachers={teachers} setPage={setPage} refreshKey={historyKey} clock={clock}
                     clearPunchSheet={clearPunchSheet} applyPunchUpload={applyPunchUpload} applyTimetableUpload={applyTimetableUpload} />
                 </motion.div>
               )}
@@ -672,7 +672,7 @@ export default function FacultyFlowApp() {
               )}
               {page === "earlyexits" && (
                 <motion.div key="early" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}>
-                  <EarlyExitsPage c={c} records={todayRecords} clock={clock} onOpenTeacher={setDrawerTeacher} hasData={!!tt && !!punchMap} />
+                  <EarlyExitsPage c={c} records={todayRecords} clock={clock} onOpenTeacher={setDrawerTeacher} hasData={!!tt && !!punchMap} refreshKey={historyKey} />
                 </motion.div>
               )}
               {page === "settings" && (
@@ -835,20 +835,155 @@ function TopHeader({ c, clock, lastSync, summary, themeMode, setThemeMode, onMen
 
 /* --------------------------------- DASHBOARD ---------------------------------- */
 
-function Dashboard({ c, records, summary, onOpenTeacher, pushToast, syncNow, lastSync, watchConnected, setWatchConnected, sources, clearPunchSheet, applyPunchUpload, applyTimetableUpload, teachers }) {
+function Dashboard({ c, records, summary, onOpenTeacher, pushToast, syncNow, lastSync, watchConnected, setWatchConnected, sources, clearPunchSheet, applyPunchUpload, applyTimetableUpload, teachers, setPage, refreshKey, clock }) {
   return (
     <div className="space-y-4">
       <div className="md:hidden relative">
         <TeacherSearch c={c} todayRecords={records} teachers={teachers} />
       </div>
-      <SummarySection c={c} summary={summary} records={records} onOpenTeacher={onOpenTeacher} />
-      <AttendanceTable c={c} records={records} onOpenTeacher={onOpenTeacher} pushToast={pushToast} clearPunchSheet={clearPunchSheet} />
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-        <AttentionPanel c={c} records={records} onOpenTeacher={onOpenTeacher} />
-        <UploadCard c={c} pushToast={pushToast} syncNow={syncNow} lastSync={lastSync}
-          watchConnected={watchConnected} setWatchConnected={setWatchConnected} sources={sources}
-          applyPunchUpload={applyPunchUpload} applyTimetableUpload={applyTimetableUpload} teacherCount={teachers.length} />
+      <EarlyExitFocus c={c} records={records} onOpenTeacher={onOpenTeacher} setPage={setPage} clock={clock} />
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        <div className="xl:col-span-2"><AttendanceTable c={c} records={records} onOpenTeacher={onOpenTeacher} pushToast={pushToast} clearPunchSheet={clearPunchSheet} /></div>
+        <EarlyExitAttention c={c} records={records} onOpenTeacher={onOpenTeacher} refreshKey={refreshKey} setPage={setPage} />
       </div>
+      <UploadCard c={c} pushToast={pushToast} syncNow={syncNow} lastSync={lastSync}
+        watchConnected={watchConnected} setWatchConnected={setWatchConnected} sources={sources}
+        applyPunchUpload={applyPunchUpload} applyTimetableUpload={applyTimetableUpload} teacherCount={teachers.length} />
+    </div>
+  );
+}
+
+function EarlyExitFocus({ c, records, onOpenTeacher, setPage, clock }) {
+  const flagged = records.filter((r) => r.earlyExit).sort((a, b) => (b.earlyBy || 0) - (a.earlyBy || 0));
+  const punchedOut = records.filter((r) => r.lastOut != null).length;
+  const avg = flagged.length ? Math.round(flagged.reduce((a, b) => a + (b.earlyBy || 0), 0) / flagged.length) : 0;
+  const th = { padding: "9px 14px", textAlign: "left", fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: c.inkFaint, borderBottom: `1px solid ${c.border}`, whiteSpace: "nowrap" };
+  const td = { padding: "10px 14px", fontSize: 12.5, borderBottom: `1px solid ${c.border}`, whiteSpace: "nowrap" };
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{ background: c.surface, border: `1px solid ${c.border}`, boxShadow: "0 1px 2px rgba(0,0,0,.03)" }}>
+      <div className="p-4 sm:p-5 flex flex-wrap items-start justify-between gap-4" style={{ borderBottom: `1px solid ${c.border}` }}>
+        <div className="flex items-center gap-4">
+          <div className="rounded-2xl px-5 py-3 text-center" style={{ background: STATUS_META.Absent.bg, border: `1px solid ${STATUS_META.Absent.fg}33` }}>
+            <div className="text-[34px] leading-none font-extrabold ff-mono" style={{ color: STATUS_META.Absent.fg, fontFamily: "'Inter Tight', Inter, sans-serif" }}>{flagged.length}</div>
+            <div className="text-[10px] font-bold uppercase tracking-wide mt-1" style={{ color: STATUS_META.Absent.fg }}>Early exits today</div>
+          </div>
+          <div>
+            <h2 className="text-[16px] font-bold flex items-center gap-2" style={{ fontFamily: "'Inter Tight', Inter, sans-serif" }}>
+              <LogOut size={16} style={{ color: c.brand }} /> Early departure monitor
+            </h2>
+            <p className="text-[12.5px] mt-0.5" style={{ color: c.inkFaint }}>
+              {dateLabel(clock || new Date())} · {punchedOut} OUT punches recorded{flagged.length ? ` · average ${avg} min early` : ""}
+            </p>
+          </div>
+        </div>
+        <button onClick={() => setPage?.("earlyexits")}
+          className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-lg text-[12.5px] font-semibold" style={{ background: c.brand, color: "#fff" }}>
+          View All Early Exits <ChevronRight size={14} />
+        </button>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] border-collapse">
+          <thead>
+            <tr style={{ background: c.surfaceAlt }}>
+              <th style={th}>Faculty</th>
+              <th style={th}>Timetable ends</th>
+              <th style={th}>Actual punch-out</th>
+              <th style={th}>Left early by</th>
+              <th style={th}>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {flagged.map((r) => (
+              <tr key={r.id} className="cursor-pointer" onClick={() => onOpenTeacher?.(r.id)}
+                onMouseEnter={(e) => (e.currentTarget.style.background = c.surfaceAlt)}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+                <td style={td}>
+                  <div className="font-semibold" style={{ color: c.ink }}>{r.name}</div>
+                  <div className="text-[11px] truncate max-w-[220px]" title={r.dept} style={{ color: c.inkFaint }}>{r.dept}</div>
+                </td>
+                <td style={{ ...td, color: c.inkMuted }} className="ff-mono">{minToLabel(r.endMin)}</td>
+                <td style={{ ...td, color: c.ink }} className="ff-mono">{minToLabel(r.lastOut)}</td>
+                <td style={{ ...td, color: STATUS_META.Late.fg, fontWeight: 600 }} className="ff-mono">{r.earlyBy} min early</td>
+                <td style={td}>
+                  <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-semibold" style={{ color: STATUS_META.Absent.fg, background: STATUS_META.Absent.bg }}>
+                    <AlertTriangle size={11} /> Early exit
+                  </span>
+                </td>
+              </tr>
+            ))}
+            {flagged.length === 0 && (
+              <tr><td colSpan={5} className="text-center py-10 text-[12.5px]" style={{ color: c.inkFaint }}>No early departures detected today.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function EarlyExitAttention({ c, records, onOpenTeacher, refreshKey, setPage }) {
+  const now = new Date();
+  const repeat = useMemo(() => {
+    const rows = historyRows().filter((r) => r.earlyExit && r.date.getMonth() === now.getMonth() && r.date.getFullYear() === now.getFullYear());
+    records.filter((r) => r.earlyExit).forEach((r) => { if (!rows.some((h) => h.id === r.id && dayKey(h.date) === dayKey(now))) rows.push({ id: r.id, teacher: r.name, dept: r.dept, earlyBy: r.earlyBy, date: now }); });
+    const by = {};
+    rows.forEach((r) => { by[r.id] = by[r.id] || { id: r.id, name: r.teacher, dept: r.dept, count: 0, total: 0 }; by[r.id].count++; by[r.id].total += r.earlyBy || 0; });
+    return Object.values(by).map((t) => ({ ...t, avg: Math.round(t.total / t.count) })).sort((a, b) => b.count - a.count || b.avg - a.avg);
+  }, [records, refreshKey]);
+  const severe = records.filter((r) => r.earlyExit && (r.earlyBy || 0) >= 60).sort((a, b) => b.earlyBy - a.earlyBy);
+  const recurring = repeat.filter((t) => t.count >= 2).slice(0, 6);
+  return (
+    <div className="rounded-2xl p-5" style={{ background: c.surface, border: `1px solid ${c.border}` }}>
+      <div className="flex items-center gap-2 mb-4">
+        <div className="h-7 w-7 rounded-lg flex items-center justify-center" style={{ background: STATUS_META.Absent.bg }}>
+          <AlertTriangle size={14} style={{ color: STATUS_META.Absent.fg }} />
+        </div>
+        <h3 className="text-[14px] font-bold" style={{ fontFamily: "'Inter Tight', Inter, sans-serif" }}>Needs attention</h3>
+      </div>
+      <div className="space-y-4 max-h-[520px] overflow-y-auto pr-0.5">
+        {severe.length > 0 && (
+          <div>
+            <div className="text-[10.5px] font-bold uppercase tracking-wide mb-2" style={{ color: STATUS_META.Absent.fg }}>Significant exits today · {severe.length}</div>
+            <div className="space-y-2">
+              {severe.map((r) => (
+                <button key={r.id} onClick={() => onOpenTeacher(r.id)} className="w-full flex items-center gap-3 rounded-xl p-3 text-left"
+                  style={{ background: c.surfaceAlt, borderLeft: `3px solid ${STATUS_META.Absent.dot}` }}>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] font-semibold truncate" style={{ color: c.ink }}>{r.name}</div>
+                    <div className="text-[11.5px] truncate" style={{ color: c.inkFaint }}>Out {minToLabel(r.lastOut)} · ends {minToLabel(r.endMin)}</div>
+                  </div>
+                  <div className="text-[11.5px] font-semibold shrink-0 ff-mono" style={{ color: STATUS_META.Absent.fg }}>{r.earlyBy}m</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {recurring.length > 0 && (
+          <div>
+            <div className="text-[10.5px] font-bold uppercase tracking-wide mb-2" style={{ color: STATUS_META.Late.fg }}>Recurring this month · {recurring.length}</div>
+            <div className="space-y-2">
+              {recurring.map((t) => (
+                <button key={t.id} onClick={() => onOpenTeacher(t.id)} className="w-full flex items-center gap-3 rounded-xl p-3 text-left"
+                  style={{ background: c.surfaceAlt, borderLeft: `3px solid ${STATUS_META.Late.dot}` }}>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] font-semibold truncate" style={{ color: c.ink }}>{t.name}</div>
+                    <div className="text-[11.5px] truncate" style={{ color: c.inkFaint }}>{t.count} early exits · avg {t.avg} min</div>
+                  </div>
+                  <ChevronRight size={14} style={{ color: c.inkFaint }} />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {severe.length + recurring.length === 0 && (
+          <div className="text-center py-8">
+            <CheckCircle2 size={28} style={{ color: c.brand, margin: "0 auto 8px" }} />
+            <p className="text-[12.5px]" style={{ color: c.inkFaint }}>No early-exit anomalies to review.</p>
+          </div>
+        )}
+      </div>
+      <button onClick={() => setPage?.("earlyexits")} className="mt-4 w-full h-9 rounded-lg text-[12.5px] font-semibold"
+        style={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, color: c.inkMuted }}>Open Early Exits page</button>
     </div>
   );
 }
