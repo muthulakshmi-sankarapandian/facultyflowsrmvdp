@@ -403,7 +403,7 @@ function mergeHistoryDay(key, records) {
   const store = loadHistoryStore();
   const byId = {};
   (store[key] || []).forEach((r) => { byId[r.id] = r; });
-  records.forEach((r) => { byId[r.id] = { id: r.id, teacher: r.name, dept: r.dept, status: r.status, delay: r.delay, deadline: r.deadline, punch: r.punch, lastOut: r.lastOut ?? null, earlyExit: !!r.earlyExit }; });
+  records.forEach((r) => { byId[r.id] = { id: r.id, teacher: r.name, dept: r.dept, status: r.status, delay: r.delay, deadline: r.deadline, punch: r.punch, lastOut: r.lastOut ?? null, earlyExit: !!r.earlyExit, endMin: r.endMin ?? null, earlyBy: r.earlyBy ?? null }; });
   store[key] = Object.values(byId);
   writeHistoryStore(store);
   return records.length;
