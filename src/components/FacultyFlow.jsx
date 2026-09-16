@@ -706,9 +706,7 @@ function Sidebar({ c, page, setPage, open, setOpen, mobileOpen, setMobileOpen })
   const content = (
     <div className="h-full flex flex-col" style={{ background: c.surface, borderRight: `1px solid ${c.border}` }}>
       <div className="flex items-center gap-2.5 px-4 h-16 shrink-0" style={{ borderBottom: `1px solid ${c.border}` }}>
-        <div className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: c.brand }}>
-          <BookOpen size={16} color="#fff" strokeWidth={2.4} />
-        </div>
+        <img src="/logo.png" alt="Faculty Flow" className="h-8 w-8 rounded-lg object-contain" />
         {open && (
           <div className="min-w-0">
             <div className="text-[14px] font-bold leading-tight truncate" style={{ color: c.ink, fontFamily: "'Inter Tight', Inter, sans-serif" }}>Faculty Flow</div>
