@@ -5,13 +5,13 @@ import FacultyFlowApp from "../components/FacultyFlow.jsx";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Faculty Flow — Teacher Roll Call & Attendance" },
+      { title: "Faculty Flow " },
       {
         name: "description",
         content:
           "Track teacher attendance, punctuality and late arrivals with live punch-sheet sync, department analytics and per-teacher monthly late reports.",
       },
-      { property: "og:title", content: "Faculty Flow — Teacher Roll Call & Attendance" },
+      { property: "og:title", content: "Faculty Flow " },
       {
         property: "og:description",
         content:
