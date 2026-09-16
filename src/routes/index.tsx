@@ -1,24 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
-// @ts-expect-error - JSX component without type declarations
 import FacultyFlowApp from "../components/FacultyFlow.jsx";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Faculty Flow " },
+      { title: "Faculty Flow" },
       {
         name: "description",
-        content:
-          "Track teacher attendance, punctuality and late arrivals with live punch-sheet sync, department analytics and per-teacher monthly late reports.",
+        content: "Faculty attendance, punctuality, and early-exit monitoring system.",
       },
-      { property: "og:title", content: "Faculty Flow " },
-      {
-        property: "og:description",
-        content:
-          "Live teacher attendance dashboard with history, analytics and instant search for any teacher's monthly late count.",
-      },
+      { property: "og:title", content: "Faculty Flow" },
+      { property: "og:description", content: "Faculty attendance and early-exit monitoring system." },
       { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: Index,
